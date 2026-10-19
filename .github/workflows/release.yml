@@ -1,0 +1,149 @@
+name: Release
+
+# 发版流程（与咔哒同一套）：
+#   1. 同步三处版本号：根 VERSION（V0.2）→ package.json / tauri.conf.json / Cargo.toml（0.2.0）
+#   2. 打 tag v0.2.0（或手动触发）→ 三平台矩阵构建
+#   3. 产物进 GitHub Release（默认 draft，确认无误后手动 Publish）
+#   4. 服务器上的 mirror-bit-pouch 每日把最新**已发布** Release 同步到
+#      /opt/ihomy/uploads/bit_pouch/，ihomy 发布页 /bit-pouch 从 /files/bit_pouch/ 直链下载
+#
+# 为什么默认发 draft：镜像取 GitHub 的 /releases/latest，它天然排除 draft / prerelease；
+# 草稿不会被同步出去，发布页与镜像也不会拿到半成品。
+#
+# 与咔哒的差异：bit_pouch 当前没有接入 tauri-plugin-updater，所以不做 .sig 签名、
+# 不生成 latest.json、也没有应用内自动更新；用户下载新包覆盖安装即可。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: release (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      # 串行：三个 job 都会往同一个 Release 上传资产，避免并发创建/更新同一个 draft。
+      max-parallel: 1
+      matrix:
+        include:
+          # Windows 只出 NSIS：安装器体验最稳，也方便覆盖安装。
+          - platform: windows-latest
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+          # Linux 出 deb + AppImage；不出 rpm（没人用，且需要另配签名密钥）。
+          - platform: ubuntu-22.04
+            args: --bundles deb,appimage
+          # macOS 出 universal（arm64 + x86_64 一份 app）的 dmg。
+          # 没有 Apple 开发者证书 → 未签名、未公证，页面文案已写明首次打开方式。
+          - platform: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # universal 架构要把两个 macOS 目标都装上（否则打包时报 target not installed）。
+      - name: Add macOS universal targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Linux deps (Tauri prerequisites)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl wget file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install
+        run: npm ci
+
+      # tauri-action 会跑 beforeBuildCommand（npm run build）→ cargo build --release，
+      # 再把各平台安装包上传到同一个 tag 的 Release。
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'bit_pouch v__VERSION__'
+          releaseBody: '开发者的随身工具袋。各平台安装包见下方 Assets：Windows 是 `bit_pouch___VERSION___x64-setup.exe`（免安装版 `bit_pouch___VERSION___x64-portable.zip`，解压即用）；Linux 是 `bit_pouch___VERSION___amd64.deb` 与 `.AppImage`；macOS 是 `bit_pouch___VERSION___universal.dmg`（未签名 / 未公证，首次打开请右键「打开」）；Web/PWA 是 `bit_pouch___VERSION___web.zip`（静态站点，解压后用任意静态服务器托管）。当前版本不含自动更新，下载新包覆盖安装即可。'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # Windows 免安装版：裸 exe 打个 zip（不含安装器、不写注册表）。
+      # 前提是系统有 WebView2 Runtime（Win10 21H2 / Win11 自带）。
+      - name: Portable zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+          # 矩阵里带了 --target，cargo 产物在 target/<triple>/release，不在 target\release。
+          $exe = "target\x86_64-pc-windows-msvc\release\bit_pouch.exe"
+          if (-not (Test-Path $exe)) { throw "找不到 $exe" }
+          $zip = "bit_pouch_${version}_x64-portable.zip"
+          Compress-Archive -Path $exe -DestinationPath $zip
+          gh release upload "v$version" $zip --clobber
+
+      # Web/PWA 静态站点包：beforeBuildCommand 已经把 dist/ 构建好，这里只打包上传。
+      - name: Web / PWA zip
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          test -f dist/index.html
+          # 打 dist 的内容而不是 dist/ 目录本身：解压后 index.html 就在根。
+          (cd dist && zip -qr "../bit_pouch_${version}_web.zip" .)
+          gh release upload "v$version" "bit_pouch_${version}_web.zip" --clobber
+
+  # 最后一道闸：版本号三处一致 + Release 资产齐全。对不上就别 Publish 这个 draft。
+  verify:
+    name: verify release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check versions and assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          gh release view "v$version" --json assets > assets.json
+          node scripts/verify-release.mjs --assets assets.json

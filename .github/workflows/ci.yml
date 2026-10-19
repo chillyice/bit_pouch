@@ -1,0 +1,87 @@
+name: CI
+
+# 每次 push / PR 都跑：前端四件套（插件闸门、类型、单测、构建、Lint）+ Rust 壳编译。
+# 三平台 cargo check 的意义：Tauri 壳依赖的 global-shortcut / single-instance 在
+# Windows / Linux / macOS 上走不同实现，只在开发机（Windows）编过不代表另外两个平台能过。
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Plugin gate
+        run: npm run check:plugins
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: ESLint
+        run: npm run lint
+
+  tauri:
+    name: tauri (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Linux deps (Tauri prerequisites)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl wget file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install
+        run: npm ci
+
+      # tauri-build 读取 frontendDist；先构建出 dist/，避免 check 阶段因目录缺失失败。
+      - name: Frontend build
+        run: npm run build
+
+      - name: Cargo check
+        run: cargo check --manifest-path src-tauri/Cargo.toml

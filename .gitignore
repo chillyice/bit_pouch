@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dev-dist/
+*.local
+
+# tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# logs / temp
+*.log
+.tmp/
+.zcode/plans/
+.zcode/tmp_api/
+.zcode/skills/
+
+# local-only notes / credentials
+docs/新人上手指南.md
+Linux部署指导.md
+*.pem
+*.p12

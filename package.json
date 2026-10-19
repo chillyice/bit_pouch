@@ -1,0 +1,51 @@
+{
+  "name": "bit-pouch",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "bit_pouch — a fast, local-first, plugin-based toolbox for builders.",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/check-plugins.mjs && vue-tsc --noEmit && vite build",
+    "build:web": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{ts,vue,css,js}\" \"scripts/**/*.mjs\" \"docs/**/*.md\"",
+    "format:check": "prettier --check \"src/**/*.{ts,vue,css,js}\" \"scripts/**/*.mjs\"",
+    "check:plugins": "node scripts/check-plugins.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "plugin:new": "node scripts/create-plugin.mjs",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "mobile:android": "tauri android init && tauri android dev",
+    "mobile:ios": "tauri ios init && tauri ios dev"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^3.0.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@tauri-apps/cli": "^2.2.5",
+    "@types/node": "^22.10.7",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "eslint": "^9.18.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vite": "^6.0.7",
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^3.0.5",
+    "vue-tsc": "^2.2.0"
+  }
+}
