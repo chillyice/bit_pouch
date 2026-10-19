@@ -36,6 +36,11 @@ export default tseslint.config(
     },
   },
   {
+    // 从 ihomy 工具箱逐行导出的纯函数核心仍是 JS 写法,保留 @ts-nocheck 以免类型检查噪声。
+    files: ['src/plugins/*/core.ts', 'src/plugins/*/bytes.ts'],
+    rules: { '@typescript-eslint/ban-ts-comment': 'off' },
+  },
+  {
     files: ['scripts/**/*.mjs', 'eslint.config.js', 'vite.config.ts'],
     languageOptions: {
       globals: { ...globals.node },

@@ -2,15 +2,15 @@ import type { ToolManifest } from '@/core/types'
 
 export default {
   id: 'hash',
-  name: { zh: 'Hash 计算', en: 'Hash Calculator' },
+  name: { zh: '哈希与校验', en: 'Hash & Checksum' },
   description: {
-    zh: '计算文本的 MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512 摘要',
-    en: 'Compute MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512 digests for text',
+    zh: 'MD5 / SHA / CRC32 / HMAC，文本与文件摘要，全程本地',
+    en: 'MD5 / SHA / CRC32 / HMAC for text and files, all local',
   },
   category: 'inspect',
   icon: 'hash',
-  keywords: ['hash', 'md5', 'sha1', 'sha256', 'sha384', 'sha512', 'digest', 'checksum', '摘要', '校验'],
-  version: '0.1.0',
+  keywords: ['hash', 'md5', 'sha1', 'sha256', 'sha384', 'sha512', 'crc32', 'hmac', 'checksum', '摘要', '校验', '文件'],
+  version: '1.0.0',
   runtime: 'worker',
   platforms: ['web', 'desktop', 'mobile'],
   offline: true,
