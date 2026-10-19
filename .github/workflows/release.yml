@@ -103,7 +103,8 @@ jobs:
         run: |
           $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
           # 矩阵里带了 --target，cargo 产物在 target/<triple>/release，不在 target\release。
-          $exe = "target\x86_64-pc-windows-msvc\release\bit_pouch.exe"
+          # 本仓 Cargo 工程在 src-tauri/，Tauri 的默认 targetDir 也是 src-tauri/target。
+          $exe = "src-tauri\target\x86_64-pc-windows-msvc\release\bit_pouch.exe"
           if (-not (Test-Path $exe)) { throw "找不到 $exe" }
           $zip = "bit_pouch_${version}_x64-portable.zip"
           Compress-Archive -Path $exe -DestinationPath $zip
