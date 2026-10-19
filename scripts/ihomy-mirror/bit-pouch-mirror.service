@@ -10,6 +10,11 @@ Type=oneshot
 User=ihomy
 Group=ihomy
 ExecStart=/usr/local/bin/bit-pouch-mirror
+# 直连 GitHub 资产常被限速/掐断（实测 ~16KB/s），走加速前缀；脚本用 GitHub API 的
+# sha256 digest 逐个校验，代理只搬字节、不参与信任链，失败会自动回退直连。
+Environment=BIT_POUCH_MIRROR_PROXY=https://gh-proxy.com/
+# 下载慢时允许长时间运行（oneshot 不设上限）。
+TimeoutStartSec=0
 # 备份类任务的同款低优先级设置：每日一次，不跟后端争磁盘与网络。
 Nice=10
 IOSchedulingClass=idle

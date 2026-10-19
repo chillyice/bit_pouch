@@ -16,13 +16,18 @@
 #   BIT_POUCH_MIRROR_PUBLIC_BASE  对外地址前缀（默认 https://ihomy.top/files/bit_pouch）
 #   BIT_POUCH_MIRROR_REPO         GitHub 仓库（默认 chillyice/bit_pouch）
 #   BIT_POUCH_MIRROR_API          测试用：替换 GitHub API 地址
+#   BIT_POUCH_MIRROR_PROXY        GitHub 加速前缀（如 https://gh-proxy.com/），留空则直连
 #   BIT_POUCH_MIRROR_FORCE=1      忽略「已同步」状态，强制重拉
+#
+# 资产完整性：GitHub API 会返回每个资产的 sha256 digest，下载后逐个校验；代理只搬字节，
+# 不参与信任链。代理失败或校验不过时自动回退直连。
 set -euo pipefail
 
 REPO="${BIT_POUCH_MIRROR_REPO:-chillyice/bit_pouch}"
 DEST="${BIT_POUCH_MIRROR_DEST:-/opt/ihomy/uploads/bit_pouch}"
 PUBLIC_BASE="${BIT_POUCH_MIRROR_PUBLIC_BASE:-https://ihomy.top/files/bit_pouch}"
 FORCE="${BIT_POUCH_MIRROR_FORCE:-0}"
+PROXY="${BIT_POUCH_MIRROR_PROXY:-}"
 API="${BIT_POUCH_MIRROR_API:-https://api.github.com/repos/${REPO}/releases/latest}"
 STATE="$DEST/.synced-tag"
 
@@ -52,7 +57,7 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-# 1. Release 资产表：name<TAB>url；只留发布页会链接的文件类型。
+# 1. Release 资产表：name<TAB>url<TAB>size<TAB>sha256；只留发布页会链接的文件类型。
 printf '%s' "$release" > "$tmp/release.json"
 "$PY" - "$tmp/release.json" "$tmp/assets.tsv" <<'PY'
 import json, re, sys
@@ -65,20 +70,53 @@ with open(sys.argv[2], "w", encoding="utf-8", newline="\n") as f:
             continue
         if not name or name in (".", "..") or "/" in name or "\\" in name:
             raise SystemExit("非法资产名：" + repr(name))
-        f.write(name + "\t" + url + "\t" + str(a.get("size", 0)) + "\n")
+        digest = a.get("digest") or ""
+        sha = digest.split(":", 1)[1] if digest.startswith("sha256:") else ""
+        f.write("\t".join((name, url, str(a.get("size", 0)), sha)) + "\n")
 PY
 
 [ -s "$tmp/assets.tsv" ] || die "Release 里没有可镜像的安装包"
-cut -f1 "$tmp/assets.tsv" > "$tmp/files.txt"
 
-# 2. 逐个下载（失败即停；文件名已在上面限定为单段路径）。
-while IFS= read -r name; do
-  url="$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' "$tmp/assets.tsv")"
+# 2. 下载单个资产：先代理（若配置）后直连，断点续传 + 重试 + sha256 校验。
+#    GitHub 在国内常被限速/掐断，-C - 让重试从断点继续而不是从头再来。
+fetch_asset() {
+  name="$1" url="$2" size="$3" sha="$4"
+  for base in ${PROXY:+"$PROXY"} ""; do
+    [ -n "$base" ] && log "下载 $name（经代理 $base）" || log "下载 $name"
+    attempt=1
+    while [ "$attempt" -le 8 ]; do
+      if curl -fsSL --http1.1 --connect-timeout 20 --speed-limit 1024 --speed-time 60 \
+           -C - -H 'User-Agent: bit-pouch-mirror' -o "$tmp/$name" "${base}${url}"; then
+        actual_size="$(stat -c %s "$tmp/$name" 2>/dev/null || echo 0)"
+        actual_sha="$(sha256sum "$tmp/$name" | awk '{print $1}')"
+        if [ "$size" != "0" ] && [ "$actual_size" != "$size" ]; then
+          log "大小不符：$name（$actual_size != $size），重试"
+          rm -f "$tmp/$name"
+        elif [ -n "$sha" ] && [ "$actual_sha" != "$sha" ]; then
+          log "sha256 不符：$name，丢弃并重试"
+          rm -f "$tmp/$name"
+        else
+          [ -n "$sha" ] && log "校验通过：$name"
+          return 0
+        fi
+      else
+        rc=$?
+        # 33/36：服务器不支持或无法满足断点续传；22：HTTP 错误（含 416）→ 从头再来。
+        case "$rc" in 33|36|22) rm -f "$tmp/$name" ;; esac
+        log "下载 $name 中断（rc=$rc，第 $attempt 次），重试"
+      fi
+      attempt=$((attempt + 1))
+      sleep 5
+    done
+    [ -n "$base" ] && log "代理下载失败，回退直连：$name"
+  done
+  die "下载 $name 失败"
+}
+
+while IFS=$'\t' read -r name url size sha; do
   [ -n "$url" ] || die "资产表里找不到 $name"
-  log "下载 $name"
-  curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 15 \
-    -H 'User-Agent: bit-pouch-mirror' -o "$tmp/$name" "$url" || die "下载 $name 失败"
-done < "$tmp/files.txt"
+  fetch_asset "$name" "$url" "$size" "$sha"
+done < "$tmp/assets.tsv"
 
 # 3. 生成清单（页面暂不读，只用于线上排查与校验）。
 "$PY" - "$tmp/assets.tsv" "$tag" "$tmp/release-meta.json" <<'PY'
@@ -88,8 +126,8 @@ version = tag[1:] if tag[:1] in ("v", "V") else tag
 assets = []
 with open(sys.argv[1], encoding="utf-8") as f:
     for line in f:
-        name, _url, size = line.rstrip("\r\n").split("\t")
-        assets.append({"name": name, "size": int(size or 0)})
+        name, _url, size, sha = line.rstrip("\r\n").split("\t")
+        assets.append({"name": name, "size": int(size or 0), "sha256": sha})
 with open(sys.argv[3], "w", encoding="utf-8", newline="\n") as f:
     json.dump({"tag": tag, "version": version, "assets": assets}, f, ensure_ascii=False, indent=2)
     f.write("\n")
@@ -97,9 +135,9 @@ PY
 
 # 4. 落盘：安装包 → 最后 release.json（同目录 rename，原子）。
 mkdir -p "$DEST"
-while IFS= read -r name; do
+while IFS=$'\t' read -r name _url _size _sha; do
   install -m 644 "$tmp/$name" "$DEST/$name"
-done < "$tmp/files.txt"
+done < "$tmp/assets.tsv"
 install -m 644 "$tmp/release-meta.json" "$DEST/.release.json.$$"
 mv -f "$DEST/.release.json.$$" "$DEST/release.json"
 printf '%s\n' "$tag" > "$DEST/.synced-tag.$$"

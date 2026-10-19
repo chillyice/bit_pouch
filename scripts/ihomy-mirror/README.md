@@ -12,7 +12,11 @@ Release 同步到服务器 `/opt/ihomy/uploads/bit_pouch/`，国内不直连 Git
 - 当前 bit_pouch **没有代码签名，也没有自动更新**：镜像不参与信任链，也不会改写任何签名。
   下载页同时保留 GitHub Releases 入口；需要强校验时请从 GitHub 下载并自行核对。
 - 先落安装包，最后原子替换 `release.json`；页面不会拿到指向缺失文件的清单。
-- 旧版本文件只增不删，回滚时把 `BitPouch.vue` 的 `version` 常量改回去即可。
+- 每个资产都用 GitHub API 返回的 **sha256 digest** 校验（`release.json` 里也记录一份），
+  校验不过不会落盘。
+- 直连 GitHub 资产在国内实测只有 ~16KB/s 且会被中断，默认经 `BIT_POUCH_MIRROR_PROXY`
+  加速前缀下载；代理只搬字节、不参与信任链，失败或校验不过自动回退直连。
+- 旧版本文件只增不删（回滚时直接改页面版本号即可）。
 
 ## 安装（ihomy 服务器，root）
 
@@ -51,6 +55,9 @@ sudo -u ihomy /usr/local/bin/bit-pouch-mirror
 
 # 强制重拉当前 tag（忽略 .synced-tag）
 sudo -u ihomy env BIT_POUCH_MIRROR_FORCE=1 /usr/local/bin/bit-pouch-mirror
+
+# 临时换加速前缀（留空表示直连）
+sudo -u ihomy env BIT_POUCH_MIRROR_PROXY=https://gh-proxy.com/ /usr/local/bin/bit-pouch-mirror
 
 # 换落盘目录 / 对外地址（一般只在测试时用）
 BIT_POUCH_MIRROR_DEST=/tmp/bit-pouch BIT_POUCH_MIRROR_PUBLIC_BASE=https://example.test/x \
