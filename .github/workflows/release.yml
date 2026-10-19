@@ -130,7 +130,9 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # draft Release 只对具备 push 权限的 token 可见；contents: read 会让
+      # `gh release view` 返回 release not found（首次发版踩过，已修）。
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
