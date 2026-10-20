@@ -44,9 +44,11 @@ jobs:
           - platform: ubuntu-22.04
             args: --bundles deb,appimage
           # macOS 出 universal（arm64 + x86_64 一份 app）的 dmg。
+          # 必须同时构建 app：只有 app bundle 会生成 macOS 更新包（.app.tar.gz），
+          # 只出 dmg 时 tauri-action 不会写 latest.json 的 darwin-* 条目。
           # 没有 Apple 开发者证书 → 未签名、未公证，页面文案已写明首次打开方式。
           - platform: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
     steps:
       - uses: actions/checkout@v4
 
