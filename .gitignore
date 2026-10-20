@@ -28,3 +28,6 @@ docs/新人上手指南.md
 Linux部署指导.md
 *.pem
 *.p12
+
+# local release artifacts
+release/

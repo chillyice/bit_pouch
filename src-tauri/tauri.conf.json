@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "bit_pouch",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "identifier": "top.ihomy.bitpouch",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "bit_pouch",
+        "title": "bit_pouch · 比特口袋",
         "width": 1200,
         "height": 820,
         "minWidth": 720,
@@ -32,6 +32,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,5 +43,17 @@
     "category": "DeveloperTool",
     "shortDescription": "A pocket toolbox for builders",
     "longDescription": "bit_pouch is a fast, local-first, plugin-based toolbox for developers. Desktop and mobile share one plugin core."
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3NEVDRjA1MEMzNkNDMkUKUldRdXpEWU1CYzlPdDZ3a0lacFlHRnRvTWdKRDNLRzhHcElHbHB2V2hCcjJQd25WLytUSTZzN1oK",
+      "requireSignedVersion": true,
+      "endpoints": [
+        "https://ihomy.top/files/bit_pouch/updates/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
   }
 }

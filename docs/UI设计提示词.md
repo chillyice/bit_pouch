@@ -9,6 +9,15 @@
 - **避免**：渐变紫、玻璃拟态堆叠、圆角过大、卡通插画、营销式大标题、Element Plus 默认观感。
 - **情绪**：打开就想干活；信息密度高但不拥挤；深色为主，浅色是“日光工作台”。
 
+### Logo 资产
+
+- **造型**：荧光绿圆角方块 + 深色像素 `b_` 字标；`b_` 同时是侧栏品牌标记，图标与界面同源。
+- **颜色**：底色 `#b8ff3d`，字标 `#142000`；横版字标深底 `#0a0d0b`，英文 `bit_pouch` 近白，中文名 `比特口袋` 荧光绿。
+- **源文件**：`src-tauri/app-icon.svg`（1024 圆角 App 图标）、`src-tauri/app-icon-maskable.svg`（PWA maskable，80% 安全区）、`public/favicon.svg`（32×32）、`public/logo.svg`（420×128 横版字标）。
+- **生成**：改完 SVG 源后跑 `npm run tauri icon src-tauri/app-icon.svg`；PWA PNG 从同一 32 网格整数倍重出；Android adaptive foreground 按 66dp 安全圆单独生成透明底 `b_`，背景色 `#B8FF3D`，不能直接用全幅图标。
+- **字标**：`bit_pouch` 等宽粗体 + 中文名 `比特口袋`；中文名同时用于 HTML 标题、PWA `short_name`、Tauri 窗口标题与侧栏副标。
+- **禁止**：加渐变、玻璃高光、3D 渲染、投影或描边；保持纯色方块与像素边缘。
+
 ## 2. 设计令牌
 
 ```css

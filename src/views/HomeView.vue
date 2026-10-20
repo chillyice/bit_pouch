@@ -15,8 +15,8 @@ const router = useRouter()
 const app = useAppStore()
 
 const search = ref('')
-const counts = getCategoryCounts()
-const totalTools = listTools().length
+const counts = computed(() => getCategoryCounts())
+const totalTools = computed(() => listTools().length)
 const categories: Array<{ key: ToolCategory | 'all' }> = [
   { key: 'all' },
   { key: 'codec' },
@@ -49,7 +49,7 @@ function setCategory(category: ToolCategory | 'all'): void {
 }
 
 function countFor(category: ToolCategory | 'all'): number {
-  return category === 'all' ? totalTools : counts[category]
+  return category === 'all' ? totalTools.value : counts.value[category]
 }
 
 function openTool(id: string): void {

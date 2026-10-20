@@ -10,6 +10,8 @@
 | 实现记录、决策、live 数据变更 | `docs/变更归档.md`（唯一时序记录） |
 | 踩坑成因、机制细节、排查方法 | `docs/踩坑速查.md` |
 | 插件开发步骤与契约 | `docs/插件开发指南.md` |
+| 对外 API 契约（manifest / run / ToolResult） | `docs/API接入文档.md` |
+| 用户插件运行时细节 | `docs/用户插件API.md` |
 | UI/交互/视觉规范 | `docs/UI设计提示词.md` |
 | ihomy 来源与差异 | `docs/迁移映射.md` |
 
@@ -47,6 +49,7 @@ C:\Users\chill\OneDrive\WorkStation\Projects\ihomy
 |----|------|
 | 应用标识 | `bit_pouch`（下划线）；Rust crate/lib 用 `bit_pouch` / `bit_pouch_lib` |
 | 插件 id | kebab-case，`^[a-z][a-z0-9-]*$`，必须与目录名一致 |
+| 用户插件 id | 同格式；不能与内置工具冲突；无目录，代码存 localStorage |
 | 插件目录 | `src/plugins/<id>/` |
 | 组件文件 | PascalCase（`HomeView.vue`、`ToolCard.vue`） |
 | 组合式/工具 | camelCase（`toolPrefs.ts`、`clipboard.ts`） |
@@ -68,6 +71,7 @@ src/
     i18n.ts           # 轻量中英双语
     theme.ts          # dark/light + CSS 变量
     storage.ts        # 版本化 localStorage key、最近/收藏
+    userPlugins.ts    # 运行时用户插件：编译、校验、结果归一化、本地存储
     toolPrefs.ts      # 只持久化选项的 useToolPrefs
     clipboard.ts      # WebView 兼容复制
     platform.ts       # web/desktop/mobile 判定
@@ -97,6 +101,7 @@ test/                 # 测试资产与用例
 8. **必须有测试**：至少覆盖正常路径、边界、错误码；迁移工具以 ihomy 的 spec 为行为基线。
 9. **错误统一**：返回 `{ ok:false, error:{ code, message } }`，不要向视图抛裸异常；`message` 按 `ctx.locale` 本地化。
 10. **新增依赖要克制**：优先原生 API；引入任何依赖前评估 gzip 体积、离线可用性、跨端兼容性，并更新文档。
+11. **用户插件只在本机运行**：源码存 `bitpouch:user-plugins:v1`，`new Function` 编译后注册；固定主线程，不进入 Worker；不得上传、自动下载或同步到远端。设置页只负责导入/导出/删除，不内置编辑器；坏插件不得阻塞启动。
 
 ## 执行模型
 
@@ -110,6 +115,7 @@ View ──callTool(id, input, options, locale)──┐
 - Worker 基础设施不可用（老浏览器/受限环境）自动回退主线程；插件自身抛错不回退，原样暴露。
 - `AbortSignal` 支持取消等待；单 Worker 模型下取消只停止等待，不中断正在执行的计算。
 - Worker 协议只传 `{ requestId, id, input, options, locale }`，返回 `{ requestId, result | error }`。
+- 用户插件绕过 Worker：注册后固定 `runtime: 'main'`，由 `loadRun` 包一层 `normalizeToolResult`；主线程死循环会卡住界面，这是已知边界。
 
 ## 性能预算（V0.1）
 
@@ -151,11 +157,12 @@ npm run verify:release  # 版本四处对齐 + Release 资产清单校验
 ```bash
 cd src-tauri && cargo check     # 仅 Rust 侧类型检查
 npm run desktop:dev             # 需要 WebView2
-npm run desktop:build           # 生成安装包
+npm run desktop:build           # 生成安装包（createUpdaterArtifacts 需要签名私钥）
 ```
 
+- **更新签名**：本地打包含 `TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/bit_pouch.key"`；CI 用 Secrets `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。私钥、密码、`.sig` 之外的密钥材料一律不入库。
 - 构建基线：入口 chunk、单工具 chunk 体积记录在 `docs/变更归档.md`；明显超出先查是否把重型依赖同步打进入口。
-- 桌面构建失败先区分：WebView2 缺失、MSVC 工具链缺失、图标缺失、Rust 依赖下载失败。
+- 桌面构建失败先区分：WebView2 缺失、MSVC 工具链缺失、图标缺失、Rust 依赖下载失败、签名私钥未配置。
 - PWA 产物在 `dist/`；`dev-dist/` 是开发期生成物，不入库。
 
 ## 跨端约定
@@ -165,14 +172,14 @@ npm run desktop:build           # 生成安装包
 - 桌面全局快捷键 `Ctrl+Shift+B` 显示/隐藏窗口，注册在 Rust 侧；与系统或其他应用冲突时在设置文档中记录。
 - Tauri capabilities 只开 `core:default`；新增插件/权限必须写明理由并更新 `src-tauri/capabilities/default.json`。
 - 移动端初始化前确认 Android SDK / Xcode；`tauri android init` / `tauri ios init` 生成的目录按需入库，签名材料不入库。
-- **分发**：安装包统一走 ihomy 直链 `/files/bit_pouch/<版本化文件名>`，GitHub Releases 作为备用；当前无代码签名、无自动更新。换版本只改 ihomy `BitPouch.vue` 的 `version` 常量，且该 tag 必须先 Publish（镜像排除 draft）。
+- **分发**：安装包统一走 ihomy 直链 `/files/bit_pouch/<版本化文件名>`，GitHub Releases 作为备用。桌面端应用内更新走 `tauri-plugin-updater`：默认读 ihomy 镜像 `/files/bit_pouch/updates/latest.json`，可切 GitHub；更新包经 Ed25519 签名校验，镜像只搬文件与改 URL、不改签名。换版本只改 ihomy `BitPouch.vue` 的 `version` 常量，且该 tag 必须先 Publish（镜像排除 draft）。
 
 ## 文档维护规矩
 
 - **变更记录**追加到 `docs/变更归档.md` 末尾，不写回 AGENTS.md。
 - **踩坑**写 `docs/踩坑速查.md`，格式“症状 → 真因 → 对策”，附取证命令。
 - **功能变更**就地改写 `docs/需求设计说明书.md` 对应章节，按功能组织，不写时间叙事。
-- **插件契约变化**同步 `docs/插件开发指南.md` 与本文件“插件硬性规则”。
+- **插件契约变化**同步 `docs/API接入文档.md`、`docs/插件开发指南.md` 与本文件“插件硬性规则”。
 - **计数口径**：工具数量、插件数量以 `npm run check:plugins` 输出为准；文档里的数字改动后顺手核对。
 
 ## 来源与同步

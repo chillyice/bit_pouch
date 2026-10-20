@@ -1,7 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Component } from 'vue'
-import { Binary, Braces, CaseSensitive, Clock, EthernetPort, Fingerprint, Hash, KeyRound, Link, Network, Regex, Wrench } from 'lucide-vue-next'
+import {
+  Binary,
+  Braces,
+  CaseSensitive,
+  Clock,
+  CodeXml,
+  EthernetPort,
+  FileSearch,
+  FileText,
+  Fingerprint,
+  Hash,
+  Image,
+  KeyRound,
+  Link,
+  Network,
+  Palette,
+  Regex,
+  Ruler,
+  Terminal,
+  Wrench,
+} from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{ name: string; size?: number; strokeWidth?: number }>(), {
   size: 20,
@@ -13,6 +33,7 @@ const icons: Record<string, Component> = {
   binary: Binary,
   'case-sensitive': CaseSensitive,
   clock: Clock,
+  code: CodeXml,
   'ethernet-port': EthernetPort,
   fingerprint: Fingerprint,
   hash: Hash,
@@ -20,6 +41,13 @@ const icons: Record<string, Component> = {
   link: Link,
   network: Network,
   regex: Regex,
+  text: FileText,
+  palette: Palette,
+  ruler: Ruler,
+  image: Image,
+  'file-search': FileSearch,
+  terminal: Terminal,
+  pdf: FileText,
   wrench: Wrench,
 }
 

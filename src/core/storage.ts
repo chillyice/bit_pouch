@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   recent: `${PREFIX}recent:v1`,
   locale: `${PREFIX}locale:v1`,
   theme: `${PREFIX}theme:v1`,
+  userPlugins: `${PREFIX}user-plugins:v1`,
   prefs: (toolId: string) => `${PREFIX}prefs:${toolId}:v1`,
 } as const
 
@@ -18,11 +19,13 @@ export function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-export function writeJson(key: string, value: unknown): void {
+export function writeJson(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value))
+    return true
   } catch {
-    // 隐私模式 / 配额满时静默降级，不影响本次会话
+    // 隐私模式 / 配额满时静默降级，不影响本次会话。调用方需要持久化保证时检查返回值。
+    return false
   }
 }
 

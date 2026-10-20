@@ -20,12 +20,13 @@ export default defineConfig({
         'icon-maskable-512.png',
       ],
       manifest: {
-        name: 'bit_pouch',
-        short_name: 'bit_pouch',
+        name: 'bit_pouch · 比特口袋',
+        short_name: '比特口袋',
         description: '开发者的随身工具袋 · A pocket toolbox for builders',
         theme_color: '#0a0d0b',
         background_color: '#0a0d0b',
         display: 'standalone',
+        lang: 'zh-CN',
         start_url: './',
         icons: [
           {

@@ -10,8 +10,14 @@ name: Release
 # 为什么默认发 draft：镜像取 GitHub 的 /releases/latest，它天然排除 draft / prerelease；
 # 草稿不会被同步出去，发布页与镜像也不会拿到半成品。
 #
-# 与咔哒的差异：bit_pouch 当前没有接入 tauri-plugin-updater，所以不做 .sig 签名、
-# 不生成 latest.json、也没有应用内自动更新；用户下载新包覆盖安装即可。
+# 应用内更新（与咔哒同一套）：
+#   tauri-plugin-updater + Ed25519 签名。流水线用 Secrets 里的私钥给安装包签名，并生成
+#   latest.json；客户端从 ihomy 镜像的 latest.json 检查更新（设置页可切 GitHub）。
+#   一次性配置仓库 Secrets：
+#     TAURI_SIGNING_PRIVATE_KEY          = ~/.tauri/bit_pouch.key 的文件内容
+#     TAURI_SIGNING_PRIVATE_KEY_PASSWORD = 私钥密码（本项目生成时未设密码，留空字符串）
+#   ⚠ tauri-cli 必须 >= 2.12.1：requireSignedVersion 要求签名里带版本号，旧 CLI 不带，
+#   客户端会以 MissingSignedVersion 拒装每一次更新。
 
 on:
   push:
@@ -85,10 +91,12 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: 'bit_pouch v__VERSION__'
-          releaseBody: '开发者的随身工具袋。各平台安装包见下方 Assets：Windows 是 `bit_pouch___VERSION___x64-setup.exe`（免安装版 `bit_pouch___VERSION___x64-portable.zip`，解压即用）；Linux 是 `bit_pouch___VERSION___amd64.deb` 与 `.AppImage`；macOS 是 `bit_pouch___VERSION___universal.dmg`（未签名 / 未公证，首次打开请右键「打开」）；Web/PWA 是 `bit_pouch___VERSION___web.zip`（静态站点，解压后用任意静态服务器托管）。当前版本不含自动更新，下载新包覆盖安装即可。'
+          releaseBody: '开发者的随身工具袋。各平台安装包见下方 Assets：Windows 是 `bit_pouch___VERSION___x64-setup.exe`（免安装版 `bit_pouch___VERSION___x64-portable.zip`，解压即用；`bit_pouch___VERSION___x64-portable.exe` 是免安装版的自动更新包，不用手动下）；Linux 是 `bit_pouch___VERSION___amd64.deb` 与 `.AppImage`；macOS 是 `bit_pouch___VERSION___universal.dmg`（未签名 / 未公证，首次打开请右键「打开」）；Web/PWA 是 `bit_pouch___VERSION___web.zip`（静态站点，解压后用任意静态服务器托管）。桌面端在「设置 → 软件更新」检查并安装更新；更新包经 Ed25519 签名校验，默认从 ihomy 镜像获取（macOS 的应用内更新需应用签名后才生效）。'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
@@ -109,6 +117,46 @@ jobs:
           $zip = "bit_pouch_${version}_x64-portable.zip"
           Compress-Archive -Path $exe -DestinationPath $zip
           gh release upload "v$version" $zip --clobber
+
+      # 免安装版的自动更新包：同一个裸 exe 单独存一份并签名。清单里用
+      # `windows-x86_64-portable` 条目指向它（客户端按安装形态选条目）。
+      # 签名必须带版本号（requireSignedVersion），所以给 `--app-version`。
+      - name: Portable update payload (bare exe + signature)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          bundle="src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          mkdir -p "$bundle"
+          portable="$bundle/bit_pouch_${version}_x64-portable.exe"
+          cp "src-tauri/target/x86_64-pc-windows-msvc/release/bit_pouch.exe" "$portable"
+          npm run tauri -- signer sign --app-version "$version" "$portable"
+          test -f "$portable.sig"
+          gh release upload "v$version" "$portable" "$portable.sig" --clobber
+
+          # 往 tauri-action 生成的 latest.json 里加免安装版条目（用 node 改 JSON，
+          # 避免 PowerShell 5.1 的 BOM / 中文转义问题）。
+          tmp="$RUNNER_TEMP/portable-latest"
+          mkdir -p "$tmp"
+          gh release download "v$version" --pattern latest.json --dir "$tmp"
+          node - "$tmp/latest.json" "$portable.sig" <<'EOF'
+          const fs = require('node:fs');
+          const [latestPath, sigPath] = process.argv.slice(2);
+          const version = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8')).version;
+          const latest = JSON.parse(fs.readFileSync(latestPath, 'utf8'));
+          latest.platforms = latest.platforms || {};
+          latest.platforms['windows-x86_64-portable'] = {
+            signature: fs.readFileSync(sigPath, 'utf8').trim(),
+            url: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/v${version}/bit_pouch_${version}_x64-portable.exe`,
+          };
+          fs.writeFileSync(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
+          EOF
+          gh release upload "v$version" "$tmp/latest.json" --clobber
 
       # Web/PWA 静态站点包：beforeBuildCommand 已经把 dist/ 构建好，这里只打包上传。
       - name: Web / PWA zip
@@ -141,7 +189,7 @@ jobs:
         with:
           node-version: 24
 
-      - name: Check versions and assets
+      - name: Check versions, assets and signatures
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,4 +197,10 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           gh release view "v$version" --json assets > assets.json
-          node scripts/verify-release.mjs --assets assets.json
+          mkdir -p "$RUNNER_TEMP/release-check/sigs"
+          gh release download "v$version" --pattern latest.json --dir "$RUNNER_TEMP/release-check"
+          gh release download "v$version" --pattern '*.sig' --dir "$RUNNER_TEMP/release-check/sigs"
+          node scripts/verify-release.mjs \
+            --assets assets.json \
+            --latest "$RUNNER_TEMP/release-check/latest.json" \
+            --sigs "$RUNNER_TEMP/release-check/sigs"

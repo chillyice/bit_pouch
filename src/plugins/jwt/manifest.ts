@@ -2,15 +2,15 @@ import type { ToolManifest } from '@/core/types'
 
 export default {
   id: 'jwt',
-  name: { zh: 'JWT 解析', en: 'JWT Decoder' },
+  name: { zh: 'JWT 与密钥', en: 'JWT & Keys' },
   description: {
-    zh: '解码 JWT 头部与载荷，查看签发/过期时间（不验签）',
-    en: 'Decode JWT header and payload and inspect issued/expiry times (no signature check)',
+    zh: '解码 / HMAC·RSA·ECDSA 验签 / 密钥对与 PEM·JWK / AES-GCM 加解密',
+    en: 'Decode / HMAC, RSA & ECDSA verify / key pairs & PEM-JWK / AES-GCM encryption',
   },
   category: 'inspect',
   icon: 'key',
-  keywords: ['jwt', 'token', 'bearer', 'claims', 'exp', 'jws', '令牌', '解析', '过期'],
-  version: '0.1.0',
+  keywords: ['jwt', 'token', 'hmac', 'rsa', 'ecdsa', 'pem', 'jwk', 'aes', '令牌', '验签', '密钥'],
+  version: '1.0.0',
   runtime: 'main',
   platforms: ['web', 'desktop', 'mobile'],
   offline: true,

@@ -16,6 +16,10 @@ description: bit_pouch 发布流程：版本号同步、构建验证、Web/PWA �
 2. **工作区**：`git status` 确认改动都是预期要发布的；有多余未提交内容先问用户。
 3. **文档**：`docs/变更归档.md` 已追加本次版本小节；需求文档对应章节已是当前事实。
 4. **验证**：执行 `/build-verify` 全部步骤；Tauri 改动必须 `cargo check`。
+5. **更新签名（一次性）**：仓库 Secrets 配好
+   - `TAURI_SIGNING_PRIVATE_KEY` = 本机 `~/.tauri/bit_pouch.key` 的文件内容
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = 私钥密码（本项目生成时未设密码，填空字符串）
+   - `@tauri-apps/cli` 必须 ≥ 2.12.1（`requireSignedVersion` 要求签名里带版本号）。
 
 ## GitHub Actions（主路径）
 
@@ -41,12 +45,16 @@ git push origin v0.2.0
 
 流水线行为：
 
-- Windows：NSIS `bit_pouch_<版本>_x64-setup.exe` + 免安装 `_x64-portable.zip`。
+- Windows：NSIS `_x64-setup.exe` + 免安装 `_x64-portable.zip` + 免安装更新包 `_x64-portable.exe`。
 - Linux：`_amd64.deb` + `_amd64.AppImage`。
 - macOS：`_universal.dmg`（未签名 / 未公证）。
 - Web/PWA：`_web.zip`（`dist/` 静态站点）。
+- 更新：各平台安装包带 `.sig`；`tauri-action` 生成 `latest.json`，Windows 再补
+  `windows-x86_64-portable` 条目。
 - 全部进**同一个 draft Release**；人工检查后再 Publish（镜像只同步已发布版本）。
-- 最后 `verify` job 跑 `scripts/verify-release.mjs`：版本一致 + 六类资产齐全。
+- 最后 `verify` job 拉取资产、`latest.json` 与全部 `.sig`，跑
+  `scripts/verify-release.mjs --assets … --latest … --sigs …`：版本一致、资产齐全、
+  平台条目与签名一一对应、key id / 签名版本正确。
 
 ### 分发到 ihomy
 
@@ -59,6 +67,8 @@ sudo -u ihomy /usr/local/bin/bit-pouch-mirror
 ```
 
 - 落盘 `/opt/ihomy/uploads/bit_pouch/`，对外 `/files/bit_pouch/`（后端已 permitAll）。
+- 更新清单与更新包落在 `/opt/ihomy/uploads/bit_pouch/updates/`，对外
+  `/files/bit_pouch/updates/latest.json`；镜像只改 URL，签名原样保留。
 - 发布页在 ihomy 仓 `frontend/src/views/BitPouch.vue`，地址 `/bit-pouch`（alias `/bit_pouch`）。
 - **换版本只改该页顶部 `version` 常量**，前提是该 tag 的 Release 已 Publish。
 
@@ -73,16 +83,17 @@ npm run build
 - `index.html` + `assets/*` + `manifest.webmanifest` + `sw.js`。
 - 静态托管即可；hash 路由无需 rewrite。
 - Release 里的 `_web.zip` 就是 `dist/` 整包。
-- 验收：本地 `npm run preview` 打开，检查首页、11 个工具、刷新深链接、离线二次访问。
+- 验收：本地 `npm run preview` 打开，检查首页与各工具、刷新深链接、离线二次访问。
 
 ## Desktop（Tauri 2）
 
 ```bash
-npm run desktop:build
+# createUpdaterArtifacts 需要签名私钥，否则打包阶段会失败
+TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/bit_pouch.key" npm run desktop:build
 ```
 
 - 首次/改图标后：`npm run tauri icon src-tauri/app-icon.svg`。
-- Windows 产物在 `src-tauri/target/release/bundle/`（msi / nsis）。
+- Windows 产物在 `src-tauri/target/release/bundle/`（msi / nsis）；`.sig` 与安装包同目录。
 - macOS / Linux 需在对应平台构建（交叉编译不在基线内）。
 - 验收：
   - 安装后启动不白屏。
@@ -90,6 +101,8 @@ npm run desktop:build
   - 重复启动只保留一个实例。
   - 复制按钮可用。
   - 卸载/覆盖安装不丢本地偏好（localStorage 按 WebView 数据目录保留）。
+  - **更新**：装上一版 → 设置页「检查更新」看到新版本 → 下载 → 安装后重启到新版本；
+    免安装版更新后仍留在原目录，不被装成安装版。
 
 ## Mobile（Tauri 2）
 
@@ -109,12 +122,12 @@ npm run mobile:ios
 ```text
 版本：V0.x / 0.x.0
 CI：frontend + 三平台 cargo check 通过
-Release：draft / 已发布；六类资产齐全（verify-release 通过）
+Release：draft / 已发布；资产 + latest.json + .sig 齐全（verify-release 通过）
 Web：dist 构建通过；preview 冒烟通过
-Desktop：xxx-setup.exe / _x64-portable.zip；快捷键/单实例/复制通过
+Desktop：xxx-setup.exe / _x64-portable.zip / _x64-portable.exe；快捷键/单实例/复制/更新通过
 Mobile：Android/iOS（已构建 / 未构建）
-镜像：/files/bit_pouch/ 已同步；发布页 version 已更新
-验证：check-plugins / typecheck / test / build / lint / cargo check / verify:release
+镜像：/files/bit_pouch/ 与 /files/bit_pouch/updates/ 已同步；发布页 version 已更新
+验证：check-plugins / typecheck / test / build / lint / cargo check / cargo test / verify:release
 已知问题：……
 ```
 

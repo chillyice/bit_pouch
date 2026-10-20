@@ -1,4 +1,4 @@
-# bit_pouch
+# bit_pouch（比特口袋）
 
 > 开发者的随身工具袋。本地处理、插件化、桌面与移动同源。
 
@@ -13,7 +13,7 @@ bit_pouch 的目标是把这些能力产品化：
 - **快**：纯前端计算 + Worker，重活不阻塞输入；常用工具一次点击直达。
 - **净**：默认零网络请求，输入内容不落盘、不上传。
 - **小**：不引入重型 UI 框架，按需加载插件，Web/PWA/桌面/移动共用一套内核。
-- **可长**：新增工具只加一个目录，不改路由、不改首页、不改构建配置。
+- **可长**：新增工具只加一个目录，不改路由、不改首页、不改构建配置；也可以在设置页导入自己写的 JavaScript 小工具（只存本机，不上传）。
 
 ## 已迁移工具（V0.1）
 
@@ -59,14 +59,18 @@ Web 版构建产物同时是 PWA，可安装到桌面或手机主屏。
 
 - **CI**：push / PR 跑插件闸门、`typecheck`、单测、生产构建、ESLint，并做 Windows / Linux / macOS 三平台 `cargo check`。
 - **Release**：打 `v<版本>` tag（或手动触发）→ 三平台矩阵构建 → 产物上传到同一个 **draft** Release，确认无误后手动 Publish。
-  - Windows：`bit_pouch_<版本>_x64-setup.exe`（NSIS）+ `_x64-portable.zip`
+  - Windows：`bit_pouch_<版本>_x64-setup.exe`（NSIS）+ `_x64-portable.zip` + `_x64-portable.exe`（免安装版的自动更新包）
   - Linux：`_amd64.deb` + `_amd64.AppImage`
   - macOS：`_universal.dmg`（未签名 / 未公证）
   - Web/PWA：`_web.zip`（`dist/` 静态站点，任意静态服务器可托管）
-- **校验**：`npm run verify:release` 检查 `VERSION` / `package.json` / `tauri.conf.json` / `Cargo.toml` 版本一致；CI 的最后一步再核对 Release 六类资产齐全。
-- **分发**：ihomy 发布页 `https://ihomy.top/bit-pouch` 统一走服务器直链 `/files/bit_pouch/<文件名>`；本仓 `scripts/ihomy-mirror/` 部署在 ihomy 服务器，每日从 GitHub 最新**已发布** Release 同步安装包（draft / prerelease 不会被镜像）。GitHub Releases 作为备用入口。
+- **签名与更新清单**：流水线用 `TAURI_SIGNING_PRIVATE_KEY` 给更新包签名，并生成 `latest.json`；Windows 的 `latest.json` 同时含安装版与免安装版条目。
+- **校验**：`npm run verify:release` 检查 `VERSION` / `package.json` / `tauri.conf.json` / `Cargo.toml` 版本一致；CI 的最后一步再核对 Release 资产、`latest.json` 平台条目与每个 `.sig` 的 key id / 版本号。
+- **分发**：ihomy 发布页 `https://ihomy.top/bit-pouch` 统一走服务器直链 `/files/bit_pouch/<文件名>`；本仓 `scripts/ihomy-mirror/` 部署在 ihomy 服务器，每日从 GitHub 最新**已发布** Release 同步安装包与更新清单到 `/files/bit_pouch/updates/`（draft / prerelease 不会被镜像）。GitHub Releases 作为备用入口。
+- **应用内更新**：桌面端「设置 → 软件更新」检查、下载、安装；默认读 ihomy 镜像，可切 GitHub Releases；Ed25519 签名不符的包会被拒绝。安装版走 NSIS 静默安装，免安装版原位替换 exe 后重启。
 - **版本切换点**：发版后只改 ihomy `BitPouch.vue` 顶部的 `version` 常量；前提是该 tag 的 Release 已 Publish。
-- **当前不含自动更新**：没有接入 `tauri-plugin-updater`，也不做 `.sig` / `latest.json`；用户下载新包覆盖安装，本地偏好与收藏保留。
+
+> 本地打桌面安装包时 `createUpdaterArtifacts` 需要签名私钥：
+> `TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/bit_pouch.key" npm run desktop:build`。
 
 ## 架构一览
 
@@ -99,15 +103,17 @@ npm run plugin:new -- jwt "JWT 解析" "JWT Inspector" inspect
 ## 文档
 
 - [文档索引](docs/README.md)
+- [API 接入文档](docs/API接入文档.md) — manifest / run / ToolResult 契约与两条接入路径
 - [架构设计](docs/架构设计.md) — 插件模型、执行模型、性能预算、跨端策略
 - [需求设计说明书](docs/需求设计说明书.md) — 功能现状与验收口径
 - [插件开发指南](docs/插件开发指南.md) — 从零新增一个工具
+- [用户插件 API](docs/用户插件API.md) — 免构建单文件插件的运行时细节
 - [踩坑速查](docs/踩坑速查.md) — 症状 → 真因 → 对策
 - [变更归档](docs/变更归档.md) — 唯一时序记录
 - [迁移映射](docs/迁移映射.md) — ihomy → bit_pouch 的来源与差异
 
 ## 状态
 
-当前为 **V0.3 工具扩展版本**：插件内核、12 个工具（含 JWT、哈希与校验、时间工具箱、随机生成器、UUID、URL、正则）、桌面/移动壳与文档基线已完成。后续优先文本与数据类工具、桌面安装包与移动端真机验证。
+当前为 **V0.4 工具补齐版本**：插件内核、20 个工具（含 JWT 验签/密钥/加解密、哈希与校验、时间工具箱、随机生成器、文本清洗与 Diff、颜色、单位、文件 ZIP、图片/ICO/EXIF、运维速查、PDF 转换、XML/HTML 格式化）、桌面/移动壳与文档基线已完成。后续优先协议与网络类工具、桌面安装包与移动端真机验证。
 
 许可证尚未确定；在明确之前请勿对外分发。

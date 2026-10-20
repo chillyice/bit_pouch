@@ -9,6 +9,7 @@ import { t, toggleLocale, localized } from '@/core/i18n'
 import { getCategoryCounts, getManifest, listTools } from '@/core/registry'
 import { theme, toggleTheme } from '@/core/theme'
 import type { ToolCategory } from '@/core/types'
+import { disposeUpdateBridge, initUpdateBridge } from '@/core/updater'
 import { useAppStore } from '@/stores/app'
 
 const route = useRoute()
@@ -16,8 +17,8 @@ const app = useAppStore()
 
 const paletteOpen = ref(false)
 const appVersion = __APP_VERSION__
-const allTools = listTools()
-const counts = getCategoryCounts()
+const allTools = computed(() => listTools())
+const counts = computed(() => getCategoryCounts())
 const categories: Array<{ key: ToolCategory }> = [
   { key: 'codec' },
   { key: 'convert' },
@@ -44,8 +45,14 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') paletteOpen.value = false
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  void initUpdateBridge()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  disposeUpdateBridge()
+})
 </script>
 
 <template>
@@ -55,7 +62,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <span class="brand-mark">b_</span>
         <span>
           <span class="brand-name">bit_pouch</span>
-          <span class="brand-tagline">{{ t('app.tagline') }}</span>
+          <span class="brand-tagline">比特口袋</span>
         </span>
       </RouterLink>
 
