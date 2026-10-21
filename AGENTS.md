@@ -102,6 +102,7 @@ test/                 # 测试资产与用例
 9. **错误统一**：返回 `{ ok:false, error:{ code, message } }`，不要向视图抛裸异常；`message` 按 `ctx.locale` 本地化。
 10. **新增依赖要克制**：优先原生 API；引入任何依赖前评估 gzip 体积、离线可用性、跨端兼容性，并更新文档。
 11. **用户插件只在本机运行**：源码存 `bitpouch:user-plugins:v1`，`new Function` 编译后注册；固定主线程，不进入 Worker；不得上传、自动下载或同步到远端。设置页只负责导入/导出/删除，不内置编辑器；坏插件不得阻塞启动。
+12. **新增工具同步在线工具页**：内置工具完成后，在 ihomy 仓 `frontend/src/tools/bitPouchTools.js` 注册在线条目，补 `BitPouchTool.vue` 面板映射、`tools.<id>` 中英文案与异步面板；在线目录计数、发布页统计同步更新。确实无法在线复现（依赖文件系统/本地二进制等）的，在 `docs/变更归档.md` 写明原因，不静默漏掉。
 
 ## 执行模型
 
