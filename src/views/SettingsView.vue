@@ -219,7 +219,6 @@ async function onFileChange(event: Event): Promise<void> {
 
 <template>
   <div class="page">
-    <p class="eyebrow">bit_pouch / settings</p>
     <h1>{{ t('settings.title') }}</h1>
     <p class="sub">{{ t('app.tagline') }}</p>
 

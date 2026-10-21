@@ -6,7 +6,7 @@ import CommandPalette from '@/components/CommandPalette.vue'
 import ToastHost from '@/components/ToastHost.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { t, toggleLocale, localized } from '@/core/i18n'
-import { getCategoryCounts, getManifest, listTools } from '@/core/registry'
+import { getManifest, listTools } from '@/core/registry'
 import { theme, toggleTheme } from '@/core/theme'
 import type { ToolCategory } from '@/core/types'
 import { disposeUpdateBridge, initUpdateBridge } from '@/core/updater'
@@ -18,7 +18,6 @@ const app = useAppStore()
 const paletteOpen = ref(false)
 const appVersion = __APP_VERSION__
 const allTools = computed(() => listTools())
-const counts = computed(() => getCategoryCounts())
 const categories: Array<{ key: ToolCategory }> = [
   { key: 'codec' },
   { key: 'convert' },
@@ -106,7 +105,6 @@ onBeforeUnmount(() => {
             @click="navigate"
           >
             <span>{{ t(`category.${category.key}`) }}</span>
-            <span class="count">{{ counts[category.key] }}</span>
           </a>
         </RouterLink>
       </nav>

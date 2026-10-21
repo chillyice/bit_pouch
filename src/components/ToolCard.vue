@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ArrowUpRight, Cpu, Star } from 'lucide-vue-next'
+import { Star } from 'lucide-vue-next'
 import ToolIcon from './ToolIcon.vue'
 import { localized, t } from '@/core/i18n'
 import { isUserTool } from '@/core/registry'
@@ -56,12 +56,9 @@ const delay = computed(() => `${Math.min(props.index, 12) * 26}ms`)
       <p v-if="!compact">{{ localized(tool.description) }}</p>
     </div>
 
-    <div v-if="!compact" class="tool-card-foot">
-      <span class="badge">{{ t(`category.${tool.category}`) }}</span>
+    <div v-if="!compact && (isUserTool(tool.id) || tool.experimental)" class="tool-card-foot">
       <span v-if="isUserTool(tool.id)" class="badge accent">{{ t('tool.userPlugin') }}</span>
-      <span v-if="tool.runtime === 'worker'" class="badge teal"><Cpu :size="10" /> {{ t('tool.worker') }}</span>
       <span v-if="tool.experimental" class="badge">{{ t('tool.experimental') }}</span>
-      <span class="enter">{{ t('tool.local') }} <ArrowUpRight :size="11" /></span>
     </div>
   </div>
 </template>

@@ -5,7 +5,7 @@ import { Search } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import ToolCard from '@/components/ToolCard.vue'
 import { locale, t } from '@/core/i18n'
-import { getCategoryCounts, getManifest, listTools, searchTools, toolPath } from '@/core/registry'
+import { getManifest, searchTools, toolPath } from '@/core/registry'
 import { pushToast } from '@/core/toast'
 import type { ToolCategory } from '@/core/types'
 import { useAppStore } from '@/stores/app'
@@ -15,8 +15,6 @@ const router = useRouter()
 const app = useAppStore()
 
 const search = ref('')
-const counts = computed(() => getCategoryCounts())
-const totalTools = computed(() => listTools().length)
 const categories: Array<{ key: ToolCategory | 'all' }> = [
   { key: 'all' },
   { key: 'codec' },
@@ -48,10 +46,6 @@ function setCategory(category: ToolCategory | 'all'): void {
   router.replace({ name: 'home', query: category === 'all' ? {} : { category } })
 }
 
-function countFor(category: ToolCategory | 'all'): number {
-  return category === 'all' ? totalTools.value : counts.value[category]
-}
-
 function openTool(id: string): void {
   app.markOpened(id)
   router.push(toolPath(id))
@@ -66,7 +60,6 @@ function toggleFavorite(id: string): void {
 <template>
   <div class="page">
     <div class="hero">
-      <p class="eyebrow">bit_pouch / local-first</p>
       <div class="hero-row">
         <div>
           <h1>{{ t('home.title') }}</h1>
@@ -89,10 +82,7 @@ function toggleFavorite(id: string): void {
           @click="setCategory(category.key)"
         >
           {{ category.key === 'all' ? t('home.all') : t(`category.${category.key}`) }}
-          <span class="n">{{ countFor(category.key) }}</span>
         </button>
-        <span class="option-spacer" />
-        <span class="hint faint mono">{{ t('home.count', { n: tools.length }) }}</span>
       </div>
     </div>
 

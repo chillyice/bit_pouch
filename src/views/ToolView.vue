@@ -2,7 +2,7 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Cpu, Star } from 'lucide-vue-next'
+import { ArrowLeft, Star } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import ToolIcon from '@/components/ToolIcon.vue'
 import { localized, t } from '@/core/i18n'
@@ -66,9 +66,7 @@ function toggleFavorite(): void {
         <div class="tool-head-main">
           <div class="tool-head-title">
             <h1>{{ localized(manifest.name) }}</h1>
-            <span class="badge">{{ t(`category.${manifest.category}`) }}</span>
             <span v-if="isUserTool(manifest.id)" class="badge accent">{{ t('tool.userPlugin') }}</span>
-            <span v-if="manifest.runtime === 'worker'" class="badge teal"><Cpu :size="10" /> {{ t('tool.worker') }}</span>
             <span v-if="manifest.experimental" class="badge">{{ t('tool.experimental') }}</span>
           </div>
           <p class="sub">{{ localized(manifest.description) }}</p>

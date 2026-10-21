@@ -28,7 +28,6 @@ function toggleFavorite(id: string): void {
 
 <template>
   <div class="page">
-    <p class="eyebrow">bit_pouch / favorites</p>
     <h1>{{ t('nav.favorites') }}</h1>
     <p class="sub">{{ t('home.emptyFavorites') }}</p>
 
