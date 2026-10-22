@@ -24,7 +24,20 @@ async function exists(path) {
 }
 
 function countCases(source) {
-  return (source.match(/\b(?:it|test)\(/g) ?? []).length
+  return (source.match(/^\s*(?:it|test)\(/gm) ?? []).length
+}
+
+async function countSpecs(dir) {
+  const entries = await readdir(dir, { withFileTypes: true })
+  const specs = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.spec.js'))
+    .map((entry) => entry.name)
+    .sort()
+  let cases = 0
+  for (const spec of specs) {
+    cases += countCases(await readFile(join(dir, spec), 'utf8'))
+  }
+  return { specs, cases }
 }
 
 export async function readTools() {
@@ -39,7 +52,7 @@ export async function readTools() {
     const manifest = (await import(pathToFileURL(join(dir, 'manifest.ts')).href)).default
     const files = {}
     for (const file of FILES) files[file] = await exists(join(dir, file))
-    const cases = files['run.spec.js'] ? countCases(await readFile(join(dir, 'run.spec.js'), 'utf8')) : 0
+    const { specs, cases } = await countSpecs(dir)
     tools.push({
       id: manifest.id,
       folder,
@@ -48,8 +61,9 @@ export async function readTools() {
       runtime: manifest.runtime ?? '?',
       order: Number(manifest.order ?? 0),
       cases,
+      specCount: specs.length,
       hasReadme: files['README.md'],
-      hasSpec: files['run.spec.js'],
+      hasSpec: specs.length > 0,
     })
   }
 
@@ -65,7 +79,7 @@ export async function buildIndex() {
     '',
     '> 自动生成，勿手改。来源：`src/plugins/*/manifest.ts` 与各目录文件。',
     '> 重新生成：`npm run docs:index`；一致性校验：`npm run docs:check`。',
-    `> 当前 **${tools.length} 个工具**；插件 \`run.spec.js\` 共 **${caseTotal}** 条 it/test（不含 core 测试）。`,
+    `> 当前 **${tools.length} 个工具**；插件 \`*.spec.js\` 共 **${caseTotal}** 条 it/test（不含 core 测试）。`,
     '',
     '| 工具 | id | 分类 | 运行时 | 顺序 | 测试 | README | 目录 |',
     '|------|----|------|--------|-----:|------|--------|------|',
