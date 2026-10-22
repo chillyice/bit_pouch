@@ -952,6 +952,22 @@ kbd {
   flex-direction: column;
   gap: 14px;
 }
+.drop-mask {
+  position: fixed;
+  inset: 10px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  box-shadow: var(--shadow);
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+}
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

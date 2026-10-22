@@ -44,12 +44,21 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') paletteOpen.value = false
 }
 
+// 工具页自己处理拖入；没处理时阻止 WebView 直接打开文件，避免页面被替换。
+function blockFileDrop(event: DragEvent): void {
+  if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('dragover', blockFileDrop)
+  window.addEventListener('drop', blockFileDrop)
   void initUpdateBridge()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('dragover', blockFileDrop)
+  window.removeEventListener('drop', blockFileDrop)
   disposeUpdateBridge()
 })
 </script>

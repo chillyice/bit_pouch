@@ -77,10 +77,8 @@ export function loadRecent(): string[] {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
 }
 
-export function pushRecent(id: string): string[] {
-  const next = [id, ...loadRecent().filter((item) => item !== id)].slice(0, 8)
-  writeJson(STORAGE_KEYS.recent, next)
-  return next
+export function saveRecent(ids: string[]): void {
+  writeJson(STORAGE_KEYS.recent, [...new Set(ids)].slice(0, 8))
 }
 
 export function clearRecent(): void {

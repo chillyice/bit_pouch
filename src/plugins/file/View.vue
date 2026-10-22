@@ -2,9 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { Download, FileArchive, FileUp, Trash2 } from 'lucide-vue-next'
 import CopyButton from '@/components/CopyButton.vue'
+import DropHint from '@/components/DropHint.vue'
 import Pane from '@/components/Pane.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import StatChips from '@/components/StatChips.vue'
+import { useFileDrop } from '@/core/fileDrop'
 import { locale, t } from '@/core/i18n'
 import { useToolPrefs } from '@/core/toolPrefs'
 import { detectFileType, formatFileSize, planZipNames } from './core'
@@ -128,13 +130,20 @@ async function unpack(file: File): Promise<void> {
 
 async function onFileChange(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
-  const list = Array.from(input.files ?? [])
+  await acceptFiles(Array.from(input.files ?? []))
+}
+
+async function acceptFiles(list: File[]): Promise<void> {
   clearAll()
   if (!list.length) return
   files.value = prefs.mode === 'pack' ? list : list.slice(0, 1)
   if (prefs.mode === 'detect') await inspect(files.value[0])
   if (prefs.mode === 'unpack') await unpack(files.value[0])
 }
+
+const { dragging, dropBinding } = useFileDrop((list) => {
+  void acceptFiles(list)
+})
 
 function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob)
@@ -168,7 +177,8 @@ watch(
 </script>
 
 <template>
-  <div class="workbench">
+  <div class="workbench" v-bind="dropBinding">
+    <DropHint :visible="dragging" />
     <div class="option-bar">
       <SegmentedControl v-model="prefs.mode" :options="modeOptions" />
       <span class="option-spacer" />

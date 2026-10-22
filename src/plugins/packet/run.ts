@@ -1,38 +1,21 @@
 // 报文解析的纯逻辑：十六进制/文本转字节、按字段模板切分、逐字节描述与常见校验值。
-// 全部基于浏览器原生 API，不引第三方库；失败只抛带 code 的 PacketError。
+// 网络协议自动识别与字段含义见 ./decode.ts；失败只抛带 code 的 PacketError。
 import type { Locale, ToolResult, ToolRun } from '@/core/types'
+import {
+  PACKET_MAX_BYTES,
+  PacketError,
+  analyzePacket,
+  parseHexBytes,
+  parsePacketInput,
+  type PacketAnalysis,
+  type PacketErrorCode,
+  type PacketInputLine,
+} from './decode'
 
-export const PACKET_MAX_BYTES = 65536
+export { PACKET_MAX_BYTES, PacketError, parseHexBytes }
+export type { PacketErrorCode, PacketInputLine, PacketAnalysis }
+
 export const BYTE_ROW_LIMIT = 512
-
-export type PacketErrorCode = 'invalidHex' | 'oddHex' | 'tooLong'
-
-export class PacketError extends Error {
-  code: PacketErrorCode
-  limit?: number
-
-  constructor(code: PacketErrorCode, extra: { limit?: number } = {}) {
-    super(code)
-    this.name = 'PacketError'
-    this.code = code
-    this.limit = extra.limit
-  }
-}
-
-/** 十六进制报文 → 字节：接受空格/逗号/冒号/换行分隔，也接受连续写法与 0xAA、\xAA 前缀 */
-export function parseHexBytes(text: string, maxBytes = PACKET_MAX_BYTES): Uint8Array {
-  const cleaned = String(text)
-    .replace(/0x/gi, '')
-    .replace(/\\x/gi, '')
-    .replace(/[\s,;:，、]+/g, '')
-  if (!cleaned) return new Uint8Array(0)
-  if (!/^[0-9a-fA-F]+$/.test(cleaned)) throw new PacketError('invalidHex')
-  if (cleaned.length % 2) throw new PacketError('oddHex')
-  if (cleaned.length / 2 > maxBytes) throw new PacketError('tooLong', { limit: maxBytes })
-  const bytes = new Uint8Array(cleaned.length / 2)
-  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16)
-  return bytes
-}
 
 /** 文本 → UTF-8 字节 */
 export const encodeUtf8 = (text: string): Uint8Array => new TextEncoder().encode(String(text))
@@ -217,6 +200,10 @@ export interface PacketRunData {
   byteCount: number
   hex: string
   ascii: string
+  mode: 'hex' | 'text'
+  kind: 'hex' | 'hexdump' | 'text'
+  lines: PacketInputLine[]
+  analysis: PacketAnalysis
   fields: FieldDef[]
   invalid: InvalidTemplateLine[]
   split: {
@@ -229,20 +216,22 @@ export interface PacketRunData {
 }
 
 export const run: ToolRun<PacketRunData> = (input, options, ctx): ToolResult<PacketRunData> => {
-  const mode = options.mode === 'text' ? 'text' : 'hex'
+  const mode = options.mode === 'text' ? 'text' : options.mode === 'hex' ? 'hex' : 'auto'
   const template = typeof options.template === 'string' ? options.template : ''
 
-  let bytes: Uint8Array
+  let parsedInput
   try {
-    bytes = mode === 'hex' ? parseHexBytes(input) : encodeUtf8(input)
+    parsedInput = parsePacketInput(input, mode)
   } catch (error) {
     if (!(error instanceof PacketError)) throw error
     return { ok: false, error: { code: error.code, message: packetErrorMessage(error.code, ctx.locale) } }
   }
+  const bytes = parsedInput.bytes
 
   const parsed = parseFieldTemplate(template)
   const split = splitFields(bytes, parsed.fields)
   const byteTable = describeBytes(bytes)
+  const analysis = analyzePacket(bytes, ctx.locale)
 
   const rows: PacketFieldView[] = split.rows.map((row) => {
     const value = bigEndianValue(row.bytes)
@@ -260,13 +249,18 @@ export const run: ToolRun<PacketRunData> = (input, options, ctx): ToolResult<Pac
     output: hexOf(bytes),
     stats: {
       bytes: bytes.length,
-      fields: parsed.fields.length,
+      fields: analysis.layers.reduce((sum, layer) => sum + layer.fields.length, 0),
       rows: byteTable.rows.length,
+      protocol: analysis.format,
     },
     data: {
       byteCount: bytes.length,
       hex: hexOf(bytes),
       ascii: asciiOf(bytes),
+      mode: parsedInput.mode,
+      kind: parsedInput.kind,
+      lines: parsedInput.lines,
+      analysis,
       fields: parsed.fields,
       invalid: parsed.invalid,
       split: {

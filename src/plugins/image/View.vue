@@ -2,9 +2,11 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Download, FileUp, ImageDown, Sparkles } from 'lucide-vue-next'
 import CopyButton from '@/components/CopyButton.vue'
+import DropHint from '@/components/DropHint.vue'
 import Pane from '@/components/Pane.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import StatChips from '@/components/StatChips.vue'
+import { useFileDrop } from '@/core/fileDrop'
 import { locale, t } from '@/core/i18n'
 import { useToolPrefs } from '@/core/toolPrefs'
 import { ICO_SIZES, MAX_IMAGE_BYTES, buildIco, parseJpegExif } from './core'
@@ -207,7 +209,10 @@ async function readExif(): Promise<void> {
 
 async function onFileChange(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
-  const next = input.files?.[0] ?? null
+  await acceptFile(input.files?.[0] ?? null)
+}
+
+async function acceptFile(next: File | null): Promise<void> {
   resetResult()
   if (!next) {
     file.value = null
@@ -221,6 +226,10 @@ async function onFileChange(event: Event): Promise<void> {
   file.value = next
   await run()
 }
+
+const { dragging, dropBinding } = useFileDrop((files) => {
+  void acceptFile(files[0] ?? null)
+})
 
 async function run(): Promise<void> {
   if (prefs.mode === 'compress') await compress()
@@ -254,7 +263,8 @@ onBeforeUnmount(resetResult)
 </script>
 
 <template>
-  <div class="workbench">
+  <div class="workbench" v-bind="dropBinding">
+    <DropHint :visible="dragging" />
     <div class="option-bar">
       <SegmentedControl v-model="prefs.mode" :options="modeOptions" />
       <span class="option-spacer" />

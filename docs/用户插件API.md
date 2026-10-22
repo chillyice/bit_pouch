@@ -344,7 +344,7 @@ export default {
 代码没有 `return` 出对象，或者文件是空的。确认最后是 `return { manifest, run }`。
 
 **提示 `PLUGIN_ID_CONFLICT`？**
-换一个 id。内置工具 id 见首页 19 个工具（如 `json`、`hash`、`uuid`），不能占用。
+换一个 id。内置工具 id 见首页 24 个工具（如 `format`、`hash`、`uuid`），不能占用。
 
 **输出是空的？**
 `output` 为空时，界面会展示 `data`；两者都为空才是“插件没有返回内容”。如果只设置了 `data` 为对象，会以 JSON 展示。

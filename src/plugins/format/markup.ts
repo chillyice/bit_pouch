@@ -2,7 +2,7 @@
 // 解析器只做词法级处理：标签、属性、注释、CDATA、DOCTYPE、处理指令都按原样保留，
 // 只重排缩进与换行；HTML 模式下按 HTML 的空元素 / 可省略闭合标签规则容错。
 // 不依赖 DOM，因此可以安全地跑在 Worker 里。
-import type { Locale, ToolResult, ToolRun } from '@/core/types'
+import type { Locale } from '@/core/types'
 
 export const MARKUP_MAX_INPUT = 2_000_000
 export const MARKUP_MAX_DEPTH = 500
@@ -337,7 +337,7 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
   return { root, mode, tags, depth }
 }
 
-function detectMode(input: string): MarkupMode {
+export function detectMarkupMode(input: string): MarkupMode {
   if (/^\s*<\?xml\b/i.test(input)) return 'xml'
   if (/^\s*<!doctype\s+html/i.test(input)) return 'html'
   const doctype = /^\s*<!doctype\s+([^\s>]+)/i.exec(input)
@@ -520,7 +520,7 @@ export function formatMarkup(text: string, options: FormatMarkupOptions = {}): F
 
   const requested: MarkupModeOption = options.mode === 'xml' || options.mode === 'html' ? options.mode : 'auto'
   try {
-    const mode = requested === 'auto' ? detectMode(input) : requested
+    const mode = requested === 'auto' ? detectMarkupMode(input) : requested
     const parsed = parseMarkup(input, mode)
     const indent = typeof options.indent === 'string' ? options.indent : '  '
 
@@ -670,37 +670,6 @@ export function markupErrorMessage(code: string, locale: Locale, detail = ''): s
   return detail ? `${message}: ${detail}` : message
 }
 
-export interface MarkupRunData {
-  mode: MarkupMode
-  tags: number
-  depth: number
-}
-
-export const run: ToolRun<MarkupRunData> = (input, options, ctx): ToolResult<MarkupRunData> => {
-  const result = formatMarkup(input, {
-    mode: options.mode === 'xml' || options.mode === 'html' ? options.mode : 'auto',
-    indent: typeof options.indent === 'string' ? options.indent : '  ',
-    minify: Boolean(options.minify),
-  })
-
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: {
-        ...result.error,
-        message: markupErrorMessage(result.error.code, ctx.locale, result.error.detail),
-      },
-    }
-  }
-
-  return {
-    ok: true,
-    output: result.text,
-    stats: { ...result.stats },
-    data: { mode: result.mode, tags: result.stats.tags, depth: result.stats.depth },
-  }
-}
-
 export const SAMPLE_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -711,7 +680,7 @@ export const SAMPLE_HTML = `<!DOCTYPE html>
 <!-- 工具入口 -->
 <main class="shell">
 <h1>开发者的随身工具袋</h1>
-<p>本地优先，<strong>即开即用</strong>，支持 <code>JSON</code> 与 XML。</p>
+<p>本地优先，<strong>即开即用</strong>，支持 <code>JSON</code> / XML / HTML。</p>
 <ul>
 <li>格式化
 <li>压缩
@@ -726,8 +695,7 @@ export const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <project name="bit_pouch" version="0.4.0">
   <!-- 纯本地工具集 -->
   <modules>
-    <module id="json" runtime="worker">JSON 格式化</module>
-    <module id="markup" runtime="worker">XML / HTML 格式化</module>
+    <module id="format" runtime="worker">JSON / XML / HTML 格式化</module>
   </modules>
   <platforms>
     <platform>web</platform>

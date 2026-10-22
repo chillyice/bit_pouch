@@ -2,10 +2,12 @@
 import { computed, ref, watch } from 'vue'
 import { FileUp, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-vue-next'
 import CopyButton from '@/components/CopyButton.vue'
+import DropHint from '@/components/DropHint.vue'
 import ErrorNote from '@/components/ErrorNote.vue'
 import Pane from '@/components/Pane.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import StatChips from '@/components/StatChips.vue'
+import { useFileDrop } from '@/core/fileDrop'
 import { locale, t } from '@/core/i18n'
 import { callTool } from '@/core/runner'
 import { useToolPrefs } from '@/core/toolPrefs'
@@ -157,6 +159,14 @@ function onFileChange(event: Event): void {
   runNow()
 }
 
+const { dragging, dropBinding } = useFileDrop((files) => {
+  const next = files[0]
+  if (!next) return
+  prefs.mode = 'file'
+  file.value = next
+  runNow()
+})
+
 function loadSample(): void {
   prefs.mode = 'text'
   prefs.algorithms = ['md5', 'sha256']
@@ -173,7 +183,8 @@ runNow()
 </script>
 
 <template>
-  <div class="workbench">
+  <div class="workbench" v-bind="dropBinding">
+    <DropHint :visible="dragging" />
     <div class="option-bar">
       <SegmentedControl v-model="prefs.mode" :options="modeOptions" />
       <span class="field-label">{{ locale === 'zh' ? '输出' : 'Output' }}</span>

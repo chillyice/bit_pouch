@@ -1,7 +1,7 @@
 // JSON 格式化的纯逻辑：自写 token 解析器，不用 JSON.parse + JSON.stringify。
 // 原因：JSON.parse 会把 19 位长整数转成双精度浮点（末尾精度丢失），也会吞掉重复键；
 // 这里保留数字与字符串的原始字面量，只重排缩进/换行（可选按键名排序），内容一个字符都不改。
-import type { Locale, ToolResult, ToolRun } from '@/core/types'
+import type { Locale } from '@/core/types'
 
 const WHITESPACE = ' \t\n\r'
 const NUMBER_RE = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y
@@ -331,33 +331,6 @@ const MESSAGES: Record<string, { zh: string; en: string }> = {
 
 export function jsonErrorMessage(code: string, locale: Locale): string {
   return MESSAGES[code]?.[locale] ?? (locale === 'zh' ? 'JSON 解析失败' : 'Failed to parse JSON')
-}
-
-export interface JsonRunData {
-  errorCode?: string
-}
-
-export const run: ToolRun<JsonRunData> = (input, options, ctx): ToolResult<JsonRunData> => {
-  const indent = options.minify ? '' : typeof options.indent === 'string' ? options.indent : '  '
-  const sortKeys = Boolean(options.sortKeys)
-  const result = formatJson(input, { indent, sortKeys })
-
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: { ...result.error, message: jsonErrorMessage(result.error.code, ctx.locale) },
-    }
-  }
-
-  return {
-    ok: true,
-    output: result.text,
-    stats: {
-      lines: result.stats.lines,
-      chars: result.stats.chars,
-      bytes: result.stats.bytes,
-    },
-  }
 }
 
 export const SAMPLE_JSON = `{

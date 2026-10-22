@@ -13,7 +13,7 @@ src/plugins/<id>/run.spec.js # 纯函数单测（随插件）
 
 ```bash
 npm test                 # 全部单测
-npm test -- src/plugins/json/run.spec.js
+npm test -- src/plugins/format/run.spec.js
 npm run check:plugins
 npm run typecheck
 npm run build
@@ -28,4 +28,6 @@ npm run build
 ## 基线
 
 - 2026-10-19 V0.1：5 个 spec 文件 / 84 条断言。
+- 2026-10-21：20 个 spec 文件 / 307 条断言（JSON 与 XML / HTML 合并为 `format`，41 条）。
+- 2026-10-21 V0.5：25 个 spec 文件 / 411 条断言（新增 data-format 25、http-message 22、curl-convert 24、ip-range 19、mqtt-topic 14）。
 - 迁移工具以 ihomy 原 spec 为行为基线；改断言必须在 `docs/迁移映射.md` 记录原因。
