@@ -11,7 +11,7 @@ import { callTool } from '@/core/runner'
 import { useToolPrefs } from '@/core/toolPrefs'
 import type { ToolError } from '@/core/types'
 
-type Mode = 'clean' | 'case' | 'table' | 'diff'
+type Mode = 'clean' | 'stats' | 'case' | 'table' | 'diff'
 type Sort = 'none' | 'asc' | 'desc' | 'length'
 type Width = 'none' | 'half' | 'full'
 
@@ -70,6 +70,7 @@ let timer: ReturnType<typeof setTimeout> | undefined
 
 const modeOptions = computed(() => [
   { value: 'clean', label: locale.value === 'zh' ? '清洗' : 'Clean' },
+  { value: 'stats', label: locale.value === 'zh' ? '统计' : 'Stats' },
   { value: 'case', label: locale.value === 'zh' ? '命名' : 'Case' },
   { value: 'table', label: locale.value === 'zh' ? '表格' : 'Table' },
   { value: 'diff', label: locale.value === 'zh' ? '对比' : 'Diff' },
@@ -109,6 +110,7 @@ const statsItems = computed(() => {
   if (typeof value.lines === 'number') items.push({ label: locale.value === 'zh' ? '行' : 'lines', value: value.lines })
   if (typeof value.bytes === 'number') items.push({ label: locale.value === 'zh' ? '字节' : 'bytes', value: value.bytes })
   if (typeof value.words === 'number') items.push({ label: locale.value === 'zh' ? '词' : 'words', value: value.words })
+  if (typeof value.cjk === 'number') items.push({ label: locale.value === 'zh' ? '中文' : 'cjk', value: value.cjk })
   if (typeof value.rows === 'number') items.push({ label: locale.value === 'zh' ? '行' : 'rows', value: value.rows })
   if (typeof value.columns === 'number') items.push({ label: locale.value === 'zh' ? '列' : 'cols', value: value.columns })
   if (typeof value.added === 'number') items.push({ label: '+', value: value.added })

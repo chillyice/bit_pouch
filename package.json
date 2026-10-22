@@ -1,6 +1,6 @@
 {
   "name": "bit-pouch",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "bit_pouch — a fast, local-first, plugin-based toolbox for builders.",

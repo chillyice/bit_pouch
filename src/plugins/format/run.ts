@@ -1,5 +1,5 @@
-// 统一格式化入口：JSON 与 XML / HTML / SVG 共用模式、缩进、压缩与错误文案。
-// 具体解析逻辑分别在 json.ts / markup.ts，都是纯函数，可安全跑在 Worker 里。
+// 统一格式化入口：JSON / XML / HTML / SVG / SQL 共用模式、缩进、压缩与错误文案。
+// 具体解析逻辑分别在 json.ts / markup.ts / sql.ts，都是纯函数，可安全跑在 Worker 里。
 import type { ToolResult, ToolRun } from '@/core/types'
 import { formatJson, jsonErrorMessage, tokenizeJson, type JsonToken } from './json'
 import {
@@ -9,13 +9,15 @@ import {
   tokenizeMarkup,
   type MarkupToken,
 } from './markup'
+import { formatSql, tokenizeSqlHighlight, type SqlHighlightToken } from './sql'
 
 export * from './json'
 export * from './markup'
+export * from './sql'
 
-export type FormatMode = 'json' | 'xml' | 'html'
+export type FormatMode = 'json' | 'xml' | 'html' | 'sql'
 export type FormatModeOption = 'auto' | FormatMode
-export type FormatToken = JsonToken | MarkupToken
+export type FormatToken = JsonToken | MarkupToken | SqlHighlightToken
 
 export interface FormatRunData {
   mode: FormatMode
@@ -32,12 +34,15 @@ const EMPTY_MESSAGE = { zh: '内容为空', en: 'Input is empty' } as const
 export function detectFormat(text: string): FormatMode {
   const head = text.trimStart()
   if (head.startsWith('{') || head.startsWith('[')) return 'json'
+  if (/^(select|insert|update|delete|with|create|alter|drop|truncate|replace|merge|explain)\b/i.test(head)) return 'sql'
   return detectMarkupMode(text)
 }
 
 /** 按识别出的模式选择着色器；输出已格式化，词法扫描不会改写内容。 */
 export function tokenizeFormat(text: string, mode: FormatMode): FormatToken[] {
-  return mode === 'json' ? tokenizeJson(text) : tokenizeMarkup(text)
+  if (mode === 'json') return tokenizeJson(text)
+  if (mode === 'sql') return tokenizeSqlHighlight(text)
+  return tokenizeMarkup(text)
 }
 
 export const run: ToolRun<FormatRunData> = (input, options, ctx): ToolResult<FormatRunData> => {
@@ -47,10 +52,22 @@ export const run: ToolRun<FormatRunData> = (input, options, ctx): ToolResult<For
   }
 
   const requested: FormatModeOption =
-    options.mode === 'json' || options.mode === 'xml' || options.mode === 'html' ? options.mode : 'auto'
+    options.mode === 'json' || options.mode === 'xml' || options.mode === 'html' || options.mode === 'sql'
+      ? options.mode
+      : 'auto'
   const mode = requested === 'auto' ? detectFormat(text) : requested
   const minify = Boolean(options.minify)
   const indent = typeof options.indent === 'string' ? options.indent : '  '
+
+  if (mode === 'sql') {
+    const output = formatSql(text, { indent: minify ? '' : indent, minify })
+    return {
+      ok: true,
+      output,
+      stats: { lines: output.split('\n').length, chars: output.length, bytes: new TextEncoder().encode(output).length },
+      data: { mode },
+    }
+  }
 
   if (mode === 'json') {
     const result = formatJson(text, { indent: minify ? '' : indent, sortKeys: Boolean(options.sortKeys) })

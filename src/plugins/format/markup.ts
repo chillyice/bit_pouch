@@ -56,6 +56,7 @@ interface ElementNode {
   selfClosing: boolean
   children: MarkupNode[]
   start: number
+  end?: number
 }
 
 interface TextNode {
@@ -73,7 +74,8 @@ type VerbatimNode =
   | { type: 'cdata'; text: string }
   | { type: 'decl'; text: string }
 
-type MarkupNode = ElementNode | TextNode | RawTextNode | VerbatimNode
+export type MarkupNode = ElementNode | TextNode | RawTextNode | VerbatimNode
+export type { ElementNode }
 
 interface ParseResult {
   root: ElementNode
@@ -191,12 +193,13 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
   const matches = (element: ElementNode, name: string): boolean =>
     mode === 'html' ? element.name.toLowerCase() === name.toLowerCase() : element.name === name
 
-  const handleClose = (name: string, position: number): void => {
+  const handleClose = (name: string, position: number, end: number): void => {
     if (!name) fail('invalidTag', position)
     if (mode === 'xml') {
       if (stack.length <= 1) fail('strayCloseTag', position, name)
       const current = top()
       if (!matches(current, name)) fail('mismatchedTag', position, name, current.name)
+      current.end = end
       stack.pop()
       return
     }
@@ -210,18 +213,25 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
     }
     if (found < 0) fail('strayCloseTag', position, name)
     // HTML：允许缺失中间闭合标签，直接闭合到匹配层
+    for (let k = found; k < stack.length; k++) stack[k].end = end
     stack.length = found
   }
 
-  const autoCloseForOpen = (name: string): void => {
+  const autoCloseForOpen = (name: string, position: number): void => {
     if (mode !== 'html') return
     const lower = name.toLowerCase()
     if (CLOSES_PARAGRAPH.has(lower)) {
-      while (stack.length > 1 && top().name.toLowerCase() === 'p') stack.pop()
+      while (stack.length > 1 && top().name.toLowerCase() === 'p') {
+        top().end = position
+        stack.pop()
+      }
     }
     const closers = IMPLICIT_CLOSE[lower]
     if (!closers) return
-    while (stack.length > 1 && closers.includes(top().name.toLowerCase())) stack.pop()
+    while (stack.length > 1 && closers.includes(top().name.toLowerCase())) {
+      top().end = position
+      stack.pop()
+    }
   }
 
   while (i < input.length) {
@@ -280,7 +290,7 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
       const inner = input.slice(i + 2, end).trim()
       const name = /^[^\s>]*/.exec(inner)?.[0] ?? ''
       if (!isTagName(name)) fail('invalidTag', i)
-      handleClose(name, i)
+      handleClose(name, i, end + 1)
       i = end + 1
       textStart = i
       continue
@@ -295,7 +305,7 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
     if (!isTagName(name)) fail('invalidTag', i)
     if (stack.length > MARKUP_MAX_DEPTH) fail('tooDeep', i)
 
-    autoCloseForOpen(name)
+    autoCloseForOpen(name, i)
     const element: ElementNode = {
       type: 'element',
       name,
@@ -313,12 +323,16 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
 
     const lower = name.toLowerCase()
     const isVoid = mode === 'html' && VOID_ELEMENTS.has(lower)
-    if (selfClosing || isVoid) continue
+    if (selfClosing || isVoid) {
+      element.end = i
+      continue
+    }
 
     if (mode === 'html' && RAW_TEXT_ELEMENTS.has(lower)) {
       const close = findRawClose(input, i, name)
       if (!close) throw new MarkupSyntaxError('unclosedTag', element.start, name, name)
       if (close.start > i) element.children.push({ type: 'rawtext', text: input.slice(i, close.start) })
+      element.end = close.end
       i = close.end
       textStart = i
       continue
@@ -334,7 +348,19 @@ function parseMarkup(input: string, requested: MarkupMode): ParseResult {
     fail('unclosedTag', unclosed.start, unclosed.name, unclosed.name)
   }
 
+  while (stack.length > 1) {
+    top().end = input.length
+    stack.pop()
+  }
+  root.end = input.length
+
   return { root, mode, tags, depth }
+}
+
+/** 供树形视图复用：解析出带偏移量的 AST。 */
+export function parseMarkupAst(input: string, requested: MarkupMode | 'auto' = 'auto'): ParseResult {
+  const mode = requested === 'auto' ? detectMarkupMode(input) : requested
+  return parseMarkup(input, mode)
 }
 
 export function detectMarkupMode(input: string): MarkupMode {

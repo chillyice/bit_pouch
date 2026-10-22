@@ -150,6 +150,13 @@ describe('run', () => {
     expect(run('', {}, { locale: 'zh' }).error.code).toBe('empty')
   })
 
+  it('stats 模式返回字符/行/词统计', () => {
+    const result = run('hello world\n你好', { mode: 'stats' }, { locale: 'en' })
+    expect(result.ok).toBe(true)
+    expect(result.stats).toMatchObject({ chars: 14, lines: 2 })
+    expect(result.output).toContain('words: 3')
+  })
+
   it('case 模式输出五种风格', () => {
     const result = run('hello world', { mode: 'case' }, { locale: 'en' })
     expect(result.ok).toBe(true)

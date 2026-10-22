@@ -5,12 +5,15 @@ import {
   detectFormat,
   formatJson,
   formatMarkup,
+  formatSql,
   jsonErrorMessage,
   markupErrorMessage,
   run,
   tokenizeJson,
   tokenizeMarkup,
+  tokenizeSqlHighlight,
 } from './run'
+import { buildFormatTree, findDeepestNode } from './tree'
 
 const ok = (text, options) => {
   const r = formatJson(text, options)
@@ -339,5 +342,72 @@ describe('标记语法着色', () => {
     expect(types).toContain('string')
     expect(types).toContain('comment')
     expect(tokens.map((token) => token.text).join('')).toBe('<div class="x">hi</div><!-- c -->')
+  })
+})
+
+describe('SQL 格式化', () => {
+  it('子句换行、关键字大写、运算符留空格', () => {
+    const output = formatSql('select a,b from t where x=1 order by a desc')
+    expect(output).toContain('SELECT a, b')
+    expect(output).toContain('\nFROM t')
+    expect(output).toContain('\nWHERE x = 1')
+    expect(output).toContain('\nORDER BY a DESC')
+  })
+
+  it('多词 JOIN 保持同一行', () => {
+    const output = formatSql('select * from a left join b on a.id=b.id')
+    expect(output).toContain('\nLEFT JOIN b ON a.id = b.id')
+  })
+
+  it('保留字符串、引号标识符与注释', () => {
+    const output = formatSql("select 'a,b' as x, `weird col` from t -- tail")
+    expect(output).toContain("'a,b'")
+    expect(output).toContain('`weird col`')
+    expect(output).toContain('-- tail')
+  })
+
+  it('压缩为单行', () => {
+    expect(formatSql('select *\nfrom t\nwhere a in (1, 2)', { minify: true })).toBe(
+      'SELECT * FROM t WHERE a IN (1,2)',
+    )
+  })
+
+  it('自动识别 SQL 并走统一入口', () => {
+    expect(detectFormat('  select 1')).toBe('sql')
+    const result = run('select * from t', { mode: 'auto' }, { locale: 'zh' })
+    expect(result.ok).toBe(true)
+    expect(result.data.mode).toBe('sql')
+    expect(result.output).toContain('SELECT')
+  })
+
+  it('语法着色标出关键字与字符串', () => {
+    const types = tokenizeSqlHighlight("select 'x' from t").map((token) => token.type)
+    expect(types).toContain('keyword')
+    expect(types).toContain('string')
+  })
+})
+
+describe('树形视图', () => {
+  it('JSON 树带输出与原文偏移量', () => {
+    const input = '{"a":1,"b":{"c":[2,3]}}'
+    const output = formatJson(input).text
+    const nodes = buildFormatTree(input, output, 'json')
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0].kind).toBe('object')
+    const a = nodes[0].children.find((node) => node.name === 'a')
+    expect(output.slice(a.start, a.end)).toBe('1')
+    expect(input.slice(a.inputStart, a.inputEnd)).toBe('1')
+    const c = nodes[0].children.find((node) => node.name === 'b').children[0]
+    expect(c.kind).toBe('array')
+    expect(findDeepestNode(nodes, c.children[1].start)?.name).toBe('1')
+  })
+
+  it('标记树保留层级', () => {
+    const input = '<root><item>x</item><item/></root>'
+    const output = formatMarkup(input, { mode: 'xml' }).text
+    const nodes = buildFormatTree(input, output, 'xml')
+    expect(nodes[0].name).toBe('root')
+    expect(nodes[0].children).toHaveLength(2)
+    expect(nodes[0].children[1].name).toBe('item')
   })
 })

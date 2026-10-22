@@ -76,6 +76,56 @@ const error = ref<ToolError | null>(null)
 const data = ref<TimeRunData | null>(null)
 const running = ref(false)
 
+type CronFrequency = 'every' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
+const cronFreq = ref<CronFrequency>('custom')
+const cronStep = ref(15)
+const cronMinute = ref(0)
+const cronHour = ref(9)
+const cronDay = ref(1)
+const cronWeekday = ref(1)
+
+const cronFrequencyOptions = computed(() => [
+  { value: 'every', label: locale.value === 'zh' ? '每 N 分钟' : 'Every N min' },
+  { value: 'hourly', label: locale.value === 'zh' ? '每小时' : 'Hourly' },
+  { value: 'daily', label: locale.value === 'zh' ? '每天' : 'Daily' },
+  { value: 'weekly', label: locale.value === 'zh' ? '每周' : 'Weekly' },
+  { value: 'monthly', label: locale.value === 'zh' ? '每月' : 'Monthly' },
+  { value: 'custom', label: locale.value === 'zh' ? '自定义' : 'Custom' },
+])
+
+const stepOptions = [1, 2, 5, 10, 15, 20, 30]
+const minuteOptions = Array.from({ length: 12 }, (_, index) => index * 5)
+const hourOptions = Array.from({ length: 24 }, (_, index) => index)
+const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1)
+const weekdayOptions = computed(() =>
+  (locale.value === 'zh' ? ['周日', '周一', '周二', '周三', '周四', '周五', '周六'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map(
+    (label, index) => ({ value: index, label }),
+  ),
+)
+
+const cronBuilderExpression = computed(() => {
+  const minute = cronMinute.value
+  const hour = cronHour.value
+  switch (cronFreq.value) {
+    case 'every':
+      return `*/${cronStep.value} * * * *`
+    case 'hourly':
+      return `${minute} * * * *`
+    case 'daily':
+      return `${minute} ${hour} * * *`
+    case 'weekly':
+      return `${minute} ${hour} * * ${cronWeekday.value}`
+    case 'monthly':
+      return `${minute} ${hour} ${cronDay.value} * *`
+    default:
+      return ''
+  }
+})
+
+watch(cronBuilderExpression, (expression) => {
+  if (expression && cronFreq.value !== 'custom') inputs.value.cron = expression
+})
+
 let seq = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -284,20 +334,65 @@ runNow()
           style="min-height: 24vh"
           :placeholder="locale === 'zh' ? '开始时间\n结束时间' : 'Start time\nEnd time'"
         />
-        <input
-          v-else
-          v-model="inputs[prefs.mode]"
-          class="input"
-          spellcheck="false"
-          style="margin: 14px"
-          :placeholder="
-            prefs.mode === 'cron'
-              ? '*/15 9-18 * * MON-FRI'
-              : locale === 'zh'
-                ? '如 1700000000 或 2023-11-14T22:13:20Z'
-                : 'e.g. 1700000000 or 2023-11-14T22:13:20Z'
-          "
-        />
+        <template v-else>
+          <details v-if="prefs.mode === 'cron'" class="cron-builder" open>
+            <summary>{{ locale === 'zh' ? '可视化生成表达式' : 'Visual expression builder' }}</summary>
+            <div class="option-bar" style="border: 0; padding: 8px 0 0">
+              <div class="option-group">
+                <span class="field-label">{{ locale === 'zh' ? '频率' : 'Frequency' }}</span>
+                <select v-model="cronFreq" class="select" style="width: 110px">
+                  <option v-for="item in cronFrequencyOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                </select>
+              </div>
+              <div v-if="cronFreq === 'every'" class="option-group">
+                <span class="field-label">{{ locale === 'zh' ? '间隔' : 'Step' }}</span>
+                <select v-model.number="cronStep" class="select" style="width: 88px">
+                  <option v-for="value in stepOptions" :key="value" :value="value">{{ value }} min</option>
+                </select>
+              </div>
+              <template v-else-if="cronFreq !== 'custom'">
+                <div v-if="cronFreq === 'weekly'" class="option-group">
+                  <span class="field-label">{{ locale === 'zh' ? '星期' : 'Weekday' }}</span>
+                  <select v-model.number="cronWeekday" class="select" style="width: 96px">
+                    <option v-for="item in weekdayOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </div>
+                <div v-if="cronFreq === 'monthly'" class="option-group">
+                  <span class="field-label">{{ locale === 'zh' ? '日' : 'Day' }}</span>
+                  <select v-model.number="cronDay" class="select" style="width: 80px">
+                    <option v-for="value in dayOptions" :key="value" :value="value">{{ value }}</option>
+                  </select>
+                </div>
+                <div v-if="cronFreq !== 'hourly'" class="option-group">
+                  <span class="field-label">{{ locale === 'zh' ? '时' : 'Hour' }}</span>
+                  <select v-model.number="cronHour" class="select" style="width: 76px">
+                    <option v-for="value in hourOptions" :key="value" :value="value">{{ value }}</option>
+                  </select>
+                </div>
+                <div class="option-group">
+                  <span class="field-label">{{ locale === 'zh' ? '分' : 'Minute' }}</span>
+                  <select v-model.number="cronMinute" class="select" style="width: 76px">
+                    <option v-for="value in minuteOptions" :key="value" :value="value">{{ value }}</option>
+                  </select>
+                </div>
+              </template>
+              <code v-if="cronBuilderExpression" class="faint" style="margin-left: auto">{{ cronBuilderExpression }}</code>
+            </div>
+          </details>
+          <input
+            v-model="inputs[prefs.mode]"
+            class="input"
+            spellcheck="false"
+            style="margin: 14px"
+            :placeholder="
+              prefs.mode === 'cron'
+                ? '*/15 9-18 * * MON-FRI'
+                : locale === 'zh'
+                  ? '如 1700000000 或 2023-11-14T22:13:20Z'
+                  : 'e.g. 1700000000 or 2023-11-14T22:13:20Z'
+            "
+          />
+        </template>
         <div class="faint" style="padding: 0 14px 14px">
           <template v-if="prefs.mode === 'convert'">
             {{

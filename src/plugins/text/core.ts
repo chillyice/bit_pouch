@@ -314,6 +314,22 @@ export function run(input, options = {}, ctx = {}) {
   const mode = options.mode || 'clean'
 
   try {
+    if (mode === 'stats') {
+      if (!text.trim()) return fail('empty', locale)
+      const result = textStats(text)
+      return {
+        ok: true,
+        output: [
+          `chars: ${result.chars}`,
+          `lines: ${result.lines}`,
+          `words: ${result.words}`,
+          `cjk: ${result.cjk}`,
+          `bytes: ${result.bytes}`,
+        ].join('\n'),
+        data: { stats: result },
+        stats: result,
+      }
+    }
     if (mode === 'case') {
       const data = convertCase(text)
       if (!splitWords(text).length) return fail('empty', locale)

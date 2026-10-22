@@ -7,10 +7,11 @@ const WHITESPACE = ' \t\n\r'
 const NUMBER_RE = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y
 export const JSON_MAX_DEPTH = 200
 
-type PrimitiveNode = { type: 'string' | 'number' | 'boolean' | 'null'; raw: string }
-type ObjectNode = { type: 'object'; entries: Array<{ key: string; value: JsonNode }> }
-type ArrayNode = { type: 'array'; items: JsonNode[] }
-type JsonNode = PrimitiveNode | ObjectNode | ArrayNode
+type NodeRange = { start?: number; end?: number }
+type PrimitiveNode = { type: 'string' | 'number' | 'boolean' | 'null'; raw: string } & NodeRange
+type ObjectNode = { type: 'object'; entries: Array<{ key: string; value: JsonNode }> } & NodeRange
+type ArrayNode = { type: 'array'; items: JsonNode[] } & NodeRange
+export type JsonNode = PrimitiveNode | ObjectNode | ArrayNode
 
 export interface JsonError {
   code: string
@@ -75,18 +76,27 @@ class JsonParser {
   parseValue(depth: number): JsonNode {
     this.skipWs()
     if (this.i >= this.len) this.fail('unexpectedEnd')
+    const start = this.i
     const ch = this.text[this.i]
-    if (ch === '{') return this.parseObject(depth + 1)
-    if (ch === '[') return this.parseArray(depth + 1)
-    if (ch === '"') return { type: 'string', raw: this.parseString() }
-    if (ch === '-' || (ch >= '0' && ch <= '9')) return { type: 'number', raw: this.parseNumber() }
-    for (const literal of ['true', 'false', 'null'] as const) {
-      if (this.text.startsWith(literal, this.i)) {
-        this.i += literal.length
-        return { type: literal === 'null' ? 'null' : 'boolean', raw: literal }
+    let node: JsonNode
+    if (ch === '{') node = this.parseObject(depth + 1)
+    else if (ch === '[') node = this.parseArray(depth + 1)
+    else if (ch === '"') node = { type: 'string', raw: this.parseString() }
+    else if (ch === '-' || (ch >= '0' && ch <= '9')) node = { type: 'number', raw: this.parseNumber() }
+    else {
+      node = undefined as unknown as JsonNode
+      for (const literal of ['true', 'false', 'null'] as const) {
+        if (this.text.startsWith(literal, this.i)) {
+          this.i += literal.length
+          node = { type: literal === 'null' ? 'null' : 'boolean', raw: literal }
+          break
+        }
       }
+      if (!node) this.fail('unexpectedChar', this.i, ch)
     }
-    this.fail('unexpectedChar', this.i, ch)
+    node.start = start
+    node.end = this.i
+    return node
   }
 
   parseObject(depth: number): ObjectNode {
@@ -231,6 +241,11 @@ function writeNode(node: JsonNode, indent: string, depth: number, sortKeys: bool
     return `[\n${body}\n${outer}]`
   }
   return node.raw
+}
+
+/** 供树形视图复用：解析出带偏移量的 AST。 */
+export function parseJsonAst(text: string): JsonNode {
+  return new JsonParser(String(text ?? '')).parse()
 }
 
 const byteLength = (s: string): number => new TextEncoder().encode(s).length

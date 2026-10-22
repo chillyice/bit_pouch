@@ -13,9 +13,11 @@ import { locale, t } from '@/core/i18n'
 import { callTool } from '@/core/runner'
 import { useToolPrefs } from '@/core/toolPrefs'
 import type { ToolError } from '@/core/types'
+import FormatTree from './FormatTree.vue'
 import {
   SAMPLE_HTML,
   SAMPLE_JSON,
+  SAMPLE_SQL,
   SAMPLE_XML,
   tokenizeFormat,
   type FormatMode,
@@ -23,6 +25,7 @@ import {
   type FormatRunData,
   type FormatToken,
 } from './run'
+import { buildFormatTree, findDeepestNode, type FormatTreeNode } from './tree'
 
 interface FormatStats {
   lines: number
@@ -44,8 +47,12 @@ const stats = ref<FormatStats | null>(null)
 const resultMode = ref<FormatMode | null>(null)
 const running = ref(false)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
+const outputView = ref<'text' | 'tree'>('text')
+const hoveredNode = ref<FormatTreeNode | null>(null)
 
 let runSeq = 0
+let savedSelection: [number, number] | null = null
+let previousFocus: HTMLElement | null = null
 const HIGHLIGHT_LIMIT = 200_000
 
 const modeOptions = computed(() => [
@@ -53,6 +60,12 @@ const modeOptions = computed(() => [
   { value: 'json', label: 'JSON' },
   { value: 'xml', label: 'XML' },
   { value: 'html', label: 'HTML' },
+  { value: 'sql', label: 'SQL' },
+])
+
+const outputViewOptions = computed(() => [
+  { value: 'text', label: locale.value === 'zh' ? '文本' : 'Text' },
+  { value: 'tree', label: locale.value === 'zh' ? '树' : 'Tree' },
 ])
 
 const indentOptions = computed(() => [
@@ -63,11 +76,22 @@ const indentOptions = computed(() => [
 
 const showSortKeys = computed(() => prefs.mode === 'auto' || prefs.mode === 'json')
 
-const tokens = computed<FormatToken[] | null>(() =>
-  output.value && resultMode.value && output.value.length <= HIGHLIGHT_LIMIT
-    ? tokenizeFormat(output.value, resultMode.value)
-    : null,
-)
+const tokens = computed<Array<FormatToken & { offset: number }> | null>(() => {
+  if (!output.value || !resultMode.value || output.value.length > HIGHLIGHT_LIMIT) return null
+  let offset = 0
+  return tokenizeFormat(output.value, resultMode.value).map((token) => {
+    const start = offset
+    offset += token.text.length
+    return { ...token, offset: start }
+  })
+})
+
+const treeNodes = computed<FormatTreeNode[]>(() => {
+  if (outputView.value !== 'tree' || !output.value || !resultMode.value) return []
+  return buildFormatTree(input.value, output.value, resultMode.value)
+})
+
+const treeAvailable = computed(() => Boolean(output.value) && resultMode.value !== null && resultMode.value !== 'sql')
 
 const statsItems = computed(() => {
   if (!stats.value) return []
@@ -85,6 +109,54 @@ const statsItems = computed(() => {
   )
   return items
 })
+
+function selectInput(node: FormatTreeNode): void {
+  const el = inputEl.value
+  if (!el || node.inputStart === undefined || node.inputEnd === undefined) return
+  if (!savedSelection) savedSelection = [el.selectionStart, el.selectionEnd]
+  if (document.activeElement !== el) {
+    previousFocus = document.activeElement as HTMLElement | null
+    el.focus({ preventScroll: true })
+  }
+  el.setSelectionRange(node.inputStart, node.inputEnd)
+}
+
+function restoreInput(): void {
+  const el = inputEl.value
+  if (!el || !savedSelection) return
+  el.setSelectionRange(savedSelection[0], savedSelection[1])
+  savedSelection = null
+  if (previousFocus && previousFocus !== el) previousFocus.focus({ preventScroll: true })
+  previousFocus = null
+}
+
+function onHoverNode(node: FormatTreeNode): void {
+  hoveredNode.value = node
+  selectInput(node)
+}
+
+function onLeaveNode(): void {
+  hoveredNode.value = null
+  restoreInput()
+}
+
+function onTokenOver(event: MouseEvent): void {
+  if (outputView.value !== 'tree' || event.buttons !== 0) return
+  const target = (event.target as HTMLElement).closest('[data-offset]')
+  if (!target) return
+  const offset = Number(target.getAttribute('data-offset'))
+  const node = findDeepestNode(treeNodes.value, offset)
+  if (node && node.id !== hoveredNode.value?.id) {
+    hoveredNode.value = node
+    selectInput(node)
+  }
+}
+
+function onOutputLeave(): void {
+  if (outputView.value !== 'tree') return
+  hoveredNode.value = null
+  restoreInput()
+}
 
 async function runFormat(minify = false): Promise<void> {
   if (!input.value.trim()) {
@@ -118,11 +190,14 @@ async function runFormat(minify = false): Promise<void> {
     resultMode.value = null
     error.value = result.error ?? { code: 'UNKNOWN', message: t('common.error') }
   }
+  hoveredNode.value = null
+  if (resultMode.value === 'sql') outputView.value = 'text'
 }
 
 function loadSample(): void {
   if (prefs.mode === 'xml') input.value = SAMPLE_XML
   else if (prefs.mode === 'html') input.value = SAMPLE_HTML
+  else if (prefs.mode === 'sql') input.value = SAMPLE_SQL
   else input.value = SAMPLE_JSON
   nextTick(() => {
     inputEl.value?.focus()
@@ -221,21 +296,37 @@ watch(
           spellcheck="false"
           autocomplete="off"
           autocapitalize="off"
-          :placeholder="locale === 'zh' ? '粘贴 JSON / XML / HTML / SVG，Ctrl + Enter 格式化' : 'Paste JSON / XML / HTML / SVG, then Ctrl + Enter'"
+          :placeholder="locale === 'zh' ? '粘贴 JSON / XML / HTML / SVG / SQL，Ctrl + Enter 格式化' : 'Paste JSON / XML / HTML / SVG / SQL, then Ctrl + Enter'"
           @keydown="onKeydown"
         />
       </Pane>
 
       <Pane :title="t('common.output')" :error="Boolean(error)">
         <template #actions>
+          <SegmentedControl v-if="treeAvailable" v-model="outputView" :options="outputViewOptions" />
           <CopyButton :text="output" icon-only ghost />
         </template>
         <ErrorNote v-if="error" :error="error" />
-        <pre v-else-if="output" class="output"><code v-if="tokens"><span
-          v-for="(token, index) in tokens"
-          :key="index"
-          :class="`tk-${token.type}`"
-        >{{ token.text }}</span></code><code v-else>{{ output }}</code></pre>
+        <template v-else-if="output">
+          <div v-if="outputView === 'tree' && treeAvailable" class="format-tree">
+            <FormatTree
+              v-for="node in treeNodes"
+              :key="node.id"
+              :node="node"
+              :depth="0"
+              :hovered-id="hoveredNode?.id ?? null"
+              @hover="onHoverNode"
+              @leave="onLeaveNode"
+            />
+            <div v-if="!treeNodes.length" class="pane-empty">{{ t('common.empty') }}</div>
+          </div>
+          <pre class="output" @mouseleave="onOutputLeave"><code v-if="tokens" @mouseover="onTokenOver"><span
+            v-for="(token, index) in tokens"
+            :key="index"
+            :data-offset="token.offset"
+            :class="[`tk-${token.type}`, { 'tk-hl': hoveredNode && token.offset >= hoveredNode.start && token.offset < hoveredNode.end }]"
+          >{{ token.text }}</span></code><code v-else>{{ output }}</code></pre>
+        </template>
         <div v-else class="pane-empty">{{ t('common.empty') }}</div>
         <template v-if="stats" #footer>
           <StatChips :items="statsItems" />
